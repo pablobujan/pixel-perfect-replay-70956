@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -38,10 +38,11 @@ function Ball({ className = "", color = "var(--primary)" }: { className?: string
     const a = ((36 + i * 72) * Math.PI) / 180;
     return { x: 12 + 10.2 * Math.sin(a), y: 12 - 10.2 * Math.cos(a), rot: 36 + i * 72 };
   });
+  const id = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <defs>
-        <mask id={`m-${color}`}>
+        <mask id={`m${id}`}>
           <circle cx="12" cy="12" r="11" fill="white" />
           <polygon points={pent(12, 12, 4.2, 0)} fill="black" />
           {outer.map((o, i) => <polygon key={i} points={pent(o.x, o.y, 3.6, o.rot + 180)} fill="black" />)}
@@ -51,7 +52,7 @@ function Ball({ className = "", color = "var(--primary)" }: { className?: string
           })}
         </mask>
       </defs>
-      <circle cx="12" cy="12" r="11" fill={color} mask={`url(#m-${color})`} />
+      <circle cx="12" cy="12" r="11" fill={color} mask={`url(#m${id})`} />
       <circle cx="12" cy="12" r="10.6" fill="none" stroke={color} strokeWidth="0.8" />
     </svg>
   );
