@@ -105,7 +105,7 @@ function AppShell() {
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <Crest size={30} /><span className="font-display text-xl tracking-wide">CD Lugo</span>
       </header>
-      <main className="flex-1 overflow-y-auto pb-28">
+      <main key={tab} className="animate-screen-in flex-1 overflow-y-auto pb-28">
         {tab === "cal" && <CalendarView />}
         {tab === "mode" && <ModeView />}
         {tab === "profile" && <ProfileView />}
@@ -117,7 +117,7 @@ function AppShell() {
             if (it.id === "mode")
               return (
                 <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
-                  <span className={`flex h-16 w-16 items-center justify-center rounded-full text-3xl ${active ? "bg-primary shadow-glow" : "bg-muted"}`}>⚽</span>
+                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" /></span>
                   <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
                 </button>
               );
@@ -197,7 +197,7 @@ function ModeView() {
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <button onClick={() => setOn(!on)} aria-label="Activar modo" className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card text-7xl transition active:scale-95">
             {on && <span className="absolute inset-0 rounded-full border-2 border-primary animate-pulse-ring" />}
-            <span className={on ? "animate-spin [animation-duration:6s]" : ""}>⚽</span>
+            <Ball className={`h-24 w-24 ${on ? "animate-spin [animation-duration:6s]" : ""}`} />
           </button>
           <p className="mt-2 font-display text-3xl">{m > 90 ? `90+${m - 90}` : m}'</p>
         </div>
@@ -220,8 +220,7 @@ function ProfileView() {
       </div>
       <div className="mt-6 rounded-3xl border border-primary/60 bg-card p-5">
         <div className="flex items-center justify-between"><p className="text-xs uppercase tracking-widest text-muted-foreground">Estado de socio</p><span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">ACTIVO</span></div>
-        <p className="mt-2 font-display text-2xl">Temporada 2026/27 · Tribuna</p>
-        <p className="text-sm text-muted-foreground">Total desconectado esta temporada: 14h 32m</p>
+        <p className="mt-2 font-display text-2xl">Temporada 2026/27</p>
       </div>
       <ul className="mt-6 divide-y divide-border rounded-3xl bg-card">
         {["Correo electrónico", "Teléfono móvil", "Número de socio", "Notificaciones"].map((l) => (
