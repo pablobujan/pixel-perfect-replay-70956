@@ -142,3 +142,28 @@
     color: var(--color-foreground);
   }
 }
+
+:root {
+  --background: oklch(0.18 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.23 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.57 0.22 27);
+  --primary-foreground: oklch(0.99 0 0);
+  --muted: oklch(0.27 0 0);
+  --muted-foreground: oklch(0.72 0.005 260);
+  --border: oklch(0.32 0 0);
+  --input: oklch(0.38 0 0);
+  --ring: oklch(0.57 0.22 27);
+  --silver: oklch(0.82 0.01 260);
+  --shadow-glow: 0 0 40px -6px color-mix(in oklab, var(--primary) 70%, transparent);
+}
+@theme inline {
+  --color-silver: var(--silver);
+  --shadow-glow: var(--shadow-glow);
+  --font-display: "Bebas Neue", sans-serif;
+  --font-sans: "Barlow", sans-serif;
+}
+body { font-family: var(--font-sans); }
+@keyframes pulse-ring { 0% { transform: scale(1); opacity: .6 } 100% { transform: scale(1.5); opacity: 0 } }
+.animate-pulse-ring { animation: pulse-ring 1.8s ease-out infinite; }
