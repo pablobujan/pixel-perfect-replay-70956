@@ -27,6 +27,14 @@ function Crest({ size = 96 }: { size?: number }) {
   );
 }
 
+function Ball({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="var(--primary)" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 12.9 15.14 10.62 13.94 6.93 10.06 6.93 8.86 10.62ZM17.74 16.98 14.97 19 15.87 21.12 19.47 18.49ZM9.03 19 6.26 16.98 4.53 18.49 8.13 21.12ZM4.43 11.34 5.49 8.09 3.52 6.9 2.14 11.14ZM10.29 4.6 13.71 4.6 14.23 2.36 9.77 2.36ZM18.51 8.09 19.57 11.34 21.86 11.14 20.48 6.9Z" />
+    </svg>
+  );
+}
+
 function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} className="w-full rounded-2xl bg-primary py-4 font-display text-2xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40" />;
 }
@@ -36,9 +44,11 @@ function Index() {
   return (
     <div className="flex min-h-screen justify-center bg-muted">
       <div className="relative flex min-h-screen w-full max-w-[430px] flex-col bg-background">
-        {step === "splash" && <Splash onNext={() => setStep("register")} />}
-        {step === "register" && <Register onNext={() => setStep("app")} />}
-        {step === "app" && <AppShell />}
+        <div key={step} className="animate-screen-in flex min-h-0 flex-1 flex-col">
+          {step === "splash" && <Splash onNext={() => setStep("register")} />}
+          {step === "register" && <Register onNext={() => setStep("app")} />}
+          {step === "app" && <AppShell />}
+        </div>
       </div>
     </div>
   );
