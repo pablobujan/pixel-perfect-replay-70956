@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Calendar, User, ChevronRight, Mail, Phone, IdCard } from "lucide-react";
+import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,10 +27,32 @@ function Crest({ size = 96 }: { size?: number }) {
   );
 }
 
-function Ball({ className = "" }: { className?: string }) {
+const pent = (cx: number, cy: number, r: number, rot: number) =>
+  Array.from({ length: 5 }, (_, i) => {
+    const a = ((rot + i * 72) * Math.PI) / 180;
+    return `${(cx + r * Math.sin(a)).toFixed(2)},${(cy - r * Math.cos(a)).toFixed(2)}`;
+  }).join(" ");
+
+function Ball({ className = "", color = "var(--primary)" }: { className?: string; color?: string }) {
+  const outer = [0, 1, 2, 3, 4].map((i) => {
+    const a = ((36 + i * 72) * Math.PI) / 180;
+    return { x: 12 + 10.2 * Math.sin(a), y: 12 - 10.2 * Math.cos(a), rot: 36 + i * 72 };
+  });
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="var(--primary)" aria-hidden="true">
-      <path fillRule="evenodd" clipRule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 12.9 15.14 10.62 13.94 6.93 10.06 6.93 8.86 10.62ZM17.74 16.98 14.97 19 15.87 21.12 19.47 18.49ZM9.03 19 6.26 16.98 4.53 18.49 8.13 21.12ZM4.43 11.34 5.49 8.09 3.52 6.9 2.14 11.14ZM10.29 4.6 13.71 4.6 14.23 2.36 9.77 2.36ZM18.51 8.09 19.57 11.34 21.86 11.14 20.48 6.9Z" />
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <defs>
+        <mask id={`m-${color}`}>
+          <circle cx="12" cy="12" r="11" fill="white" />
+          <polygon points={pent(12, 12, 4.2, 0)} fill="black" />
+          {outer.map((o, i) => <polygon key={i} points={pent(o.x, o.y, 3.6, o.rot + 180)} fill="black" />)}
+          {[0, 1, 2, 3, 4].map((i) => {
+            const a = ((i * 72) * Math.PI) / 180;
+            return <line key={i} x1={12 + 4.2 * Math.sin(a)} y1={12 - 4.2 * Math.cos(a)} x2={12 + 7.4 * Math.sin(a)} y2={12 - 7.4 * Math.cos(a)} stroke="black" strokeWidth="1.1" />;
+          })}
+        </mask>
+      </defs>
+      <circle cx="12" cy="12" r="11" fill={color} mask={`url(#m-${color})`} />
+      <circle cx="12" cy="12" r="10.6" fill="none" stroke={color} strokeWidth="0.8" />
     </svg>
   );
 }
@@ -39,15 +61,21 @@ function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} className="w-full rounded-2xl bg-primary py-4 font-display text-2xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40" />;
 }
 
+type UserData = { name: string; email: string; phone: string; member: string; notif: boolean };
+type UserProps = { user: UserData; setUser: (u: UserData) => void };
+const initials = (n: string) => n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
+const shortName = (n: string) => n.trim().split(/\s+/).slice(0, 2).join(" ") || "Socio";
+
 function Index() {
   const [step, setStep] = useState<"splash" | "register" | "app">("splash");
+  const [user, setUser] = useState<UserData>({ name: "", email: "", phone: "", member: "", notif: true });
   return (
     <div className="flex min-h-screen justify-center bg-muted">
       <div className="relative flex min-h-screen w-full max-w-[430px] flex-col bg-background">
         <div key={step} className="animate-screen-in flex min-h-0 flex-1 flex-col">
           {step === "splash" && <Splash onNext={() => setStep("register")} />}
-          {step === "register" && <Register onNext={() => setStep("app")} />}
-          {step === "app" && <AppShell />}
+          {step === "register" && <Register user={user} setUser={setUser} onNext={() => setStep("app")} />}
+          {step === "app" && <AppShell user={user} setUser={setUser} />}
         </div>
       </div>
     </div>
@@ -61,8 +89,8 @@ function Splash({ onNext }: { onNext: () => void }) {
       <div className="flex flex-col items-center gap-8">
         <Crest size={130} />
         <div>
-          <h1 className="font-display text-6xl leading-none tracking-wide">Vive o partido</h1>
-          <p className="mt-2 font-display text-3xl tracking-wide text-primary">no Anxo Carro</p>
+          <h1 className="font-display text-6xl leading-none tracking-wide">Vive el partido</h1>
+          <p className="mt-2 font-display text-3xl tracking-wide text-primary">en el Anxo Carro</p>
           <p className="mt-6 text-muted-foreground">Guarda el móvil. Cada minuto en la grada cuenta. Aquí se anima con el corazón, no con la pantalla.</p>
         </div>
       </div>
@@ -80,16 +108,18 @@ function Field({ icon: Icon, ...p }: { icon: typeof Mail } & React.InputHTMLAttr
   );
 }
 
-function Register({ onNext }: { onNext: () => void }) {
+function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps) {
+  const bind = (k: "name" | "email" | "phone" | "member") => ({ value: user[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setUser({ ...user, [k]: e.target.value }) });
   return (
     <form onSubmit={(e) => { e.preventDefault(); onNext(); }} className="flex flex-1 flex-col px-6 py-10">
       <div className="flex items-center gap-3"><Crest size={40} /><span className="font-display text-2xl tracking-wide">CD Lugo</span></div>
       <h2 className="mt-10 font-display text-5xl tracking-wide">Identifícate</h2>
       <p className="mb-8 text-muted-foreground">Acceso rápido para socios.</p>
       <div className="flex flex-col gap-4">
-        <Field icon={Mail} type="email" placeholder="Correo electrónico" />
-        <Field icon={Phone} type="tel" placeholder="Teléfono móvil" />
-        <Field icon={IdCard} inputMode="numeric" placeholder="Número de socio" />
+        <Field icon={User} placeholder="Nombre completo" {...bind("name")} />
+        <Field icon={Mail} type="email" placeholder="Correo electrónico" {...bind("email")} />
+        <Field icon={Phone} type="tel" placeholder="Teléfono móvil" {...bind("phone")} />
+        <Field icon={IdCard} inputMode="numeric" placeholder="Número de socio" {...bind("member")} />
       </div>
       <div className="mt-auto pt-8"><Btn type="submit">Entrar al Anxo Carro</Btn></div>
     </form>
@@ -97,7 +127,7 @@ function Register({ onNext }: { onNext: () => void }) {
 }
 
 type Tab = "cal" | "mode" | "profile";
-function AppShell() {
+function AppShell({ user, setUser }: UserProps) {
   const [tab, setTab] = useState<Tab>("mode");
   const items: { id: Tab; label: string }[] = [{ id: "cal", label: "Calendario" }, { id: "mode", label: "Anxo Carro" }, { id: "profile", label: "Perfil" }];
   return (
@@ -108,7 +138,7 @@ function AppShell() {
       <main key={tab} className="animate-screen-in flex-1 overflow-y-auto pb-28">
         {tab === "cal" && <CalendarView />}
         {tab === "mode" && <ModeView />}
-        {tab === "profile" && <ProfileView />}
+        {tab === "profile" && <ProfileView user={user} setUser={setUser} />}
       </main>
       <nav className="fixed bottom-0 w-full max-w-[430px] border-t border-border bg-card px-6 pb-4 pt-2">
         <div className="flex items-end justify-between">
@@ -117,7 +147,7 @@ function AppShell() {
             if (it.id === "mode")
               return (
                 <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
-                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" /></span>
+                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
                   <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
                 </button>
               );
@@ -135,11 +165,11 @@ function AppShell() {
 }
 
 const past = [
-  { rival: "Ourense CF", res: "2 - 1", date: "19 oct", home: true, w: "V" },
-  { rival: "Real Avilés", res: "0 - 0", date: "12 oct", home: false, w: "E" },
-  { rival: "Zamora CF", res: "3 - 1", date: "5 oct", home: true, w: "V" },
-  { rival: "Arenteiro", res: "1 - 2", date: "28 sep", home: false, w: "D" },
-  { rival: "Ponferradina", res: "1 - 1", date: "21 sep", home: true, w: "E" },
+  { rival: "Ourense CF", gf: 2, ga: 1, date: "19 oct", home: true },
+  { rival: "Real Avilés", gf: 0, ga: 0, date: "12 oct", home: false },
+  { rival: "Zamora CF", gf: 3, ga: 1, date: "5 oct", home: true },
+  { rival: "Arenteiro", gf: 1, ga: 2, date: "28 sep", home: false },
+  { rival: "Ponferradina", gf: 1, ga: 1, date: "21 sep", home: true },
 ];
 
 function CalendarView() {
@@ -157,13 +187,24 @@ function CalendarView() {
       </div>
       <h3 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Últimos resultados</h3>
       <ul className="flex flex-col gap-2">
-        {past.map((m) => (
-          <li key={m.date} className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
-            <span className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${m.w === "V" ? "bg-primary text-primary-foreground" : "bg-muted text-silver"}`}>{m.w}</span>
-            <div className="flex-1"><p className="font-semibold">{m.home ? "vs" : "@"} {m.rival}</p><p className="text-xs text-muted-foreground">{m.date}</p></div>
-            <span className="font-display text-2xl">{m.res}</span>
-          </li>
-        ))}
+        {past.map((m, i) => {
+          const w = m.gf > m.ga ? "V" : m.gf === m.ga ? "E" : "D";
+          const badge = w === "V" ? "bg-win text-primary-foreground" : w === "E" ? "bg-muted text-silver" : "bg-primary text-primary-foreground";
+          const [l, v] = m.home ? ["CD Lugo", m.rival] : [m.rival, "CD Lugo"];
+          const [gl, gv] = m.home ? [m.gf, m.ga] : [m.ga, m.gf];
+          const Where = m.home ? Home : Plane;
+          return (
+            <li key={m.date} style={{ animationDelay: `${i * 70}ms` }} className="animate-screen-in flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge}`}>{w}</span>
+              <div className="min-w-0 flex-1">
+                <p className={`truncate text-sm ${m.home ? "font-bold" : ""}`}>{l}</p>
+                <p className={`truncate text-sm ${!m.home ? "font-bold" : ""}`}>{v}</p>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground"><Where className="h-3 w-3" />{m.home ? "En casa" : "Visitante"} · {m.date}</p>
+              </div>
+              <div className="flex flex-col items-end font-display text-2xl leading-tight"><span>{gl}</span><span>{gv}</span></div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -211,21 +252,46 @@ function ModeView() {
   );
 }
 
-function ProfileView() {
+function ProfileView({ user, setUser }: UserProps) {
+  const [edit, setEdit] = useState<null | "name" | "email" | "phone" | "member">(null);
+  const rows: { k: "name" | "email" | "phone" | "member"; l: string; icon: typeof Mail }[] = [
+    { k: "name", l: "Nombre completo", icon: User },
+    { k: "email", l: "Correo electrónico", icon: Mail },
+    { k: "phone", l: "Teléfono móvil", icon: Phone },
+    { k: "member", l: "Número de socio", icon: IdCard },
+  ];
   return (
     <div className="px-5 py-6">
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary font-display text-3xl text-primary-foreground">PB</div>
-        <div><h2 className="font-display text-3xl tracking-wide">Pablo Buján</h2><p className="text-sm text-muted-foreground">Socio nº 04821</p></div>
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary font-display text-3xl text-primary-foreground">{initials(user.name)}</div>
+        <div><h2 className="font-display text-3xl tracking-wide">{shortName(user.name)}</h2><p className="text-sm text-muted-foreground">Socio nº {user.member || "—"}</p></div>
       </div>
       <div className="mt-6 rounded-3xl border border-primary/60 bg-card p-5">
         <div className="flex items-center justify-between"><p className="text-xs uppercase tracking-widest text-muted-foreground">Estado de socio</p><span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">ACTIVO</span></div>
         <p className="mt-2 font-display text-2xl">Temporada 2026/27</p>
       </div>
-      <ul className="mt-6 divide-y divide-border rounded-3xl bg-card">
-        {["Correo electrónico", "Teléfono móvil", "Número de socio", "Notificaciones"].map((l) => (
-          <li key={l} className="flex items-center justify-between px-5 py-4"><span>{l}</span><ChevronRight className="h-5 w-5 text-muted-foreground" /></li>
+      <ul className="mt-6 divide-y divide-border overflow-hidden rounded-3xl bg-card">
+        {rows.map(({ k, l, icon: Icon }) => (
+          <li key={k} className="px-5 py-4">
+            <button onClick={() => setEdit(edit === k ? null : k)} className="flex w-full items-center gap-3 text-left">
+              <Icon className="h-5 w-5 text-muted-foreground" />
+              <div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">{l}</p><p className="truncate">{user[k] || "—"}</p></div>
+              <ChevronRight className={`h-5 w-5 text-muted-foreground transition-transform duration-300 ${edit === k ? "rotate-90" : ""}`} />
+            </button>
+            <div className={`grid transition-all duration-300 ease-out ${edit === k ? "mt-3 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+              <div className="overflow-hidden">
+                <input value={user[k]} onChange={(e) => setUser({ ...user, [k]: e.target.value })} placeholder={l} className="w-full rounded-xl border border-input bg-transparent px-4 py-3 outline-none focus:border-primary" />
+              </div>
+            </div>
+          </li>
         ))}
+        <li className="flex items-center gap-3 px-5 py-4">
+          <Bell className="h-5 w-5 text-muted-foreground" />
+          <span className="flex-1">Notificaciones</span>
+          <button role="switch" aria-checked={user.notif} aria-label="Notificaciones" onClick={() => setUser({ ...user, notif: !user.notif })} className={`relative h-8 w-14 rounded-full transition-colors duration-300 ${user.notif ? "bg-win" : "bg-muted"}`}>
+            <span className={`absolute top-1 h-6 w-6 rounded-full bg-foreground shadow transition-all duration-300 ${user.notif ? "left-7" : "left-1"}`} />
+          </button>
+        </li>
       </ul>
     </div>
   );
