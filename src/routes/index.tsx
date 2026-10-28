@@ -27,6 +27,14 @@ function Crest({ size = 96 }: { size?: number }) {
   );
 }
 
+function Ball({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="var(--primary)" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 12.9 15.14 10.62 13.94 6.93 10.06 6.93 8.86 10.62ZM17.74 16.98 14.97 19 15.87 21.12 19.47 18.49ZM9.03 19 6.26 16.98 4.53 18.49 8.13 21.12ZM4.43 11.34 5.49 8.09 3.52 6.9 2.14 11.14ZM10.29 4.6 13.71 4.6 14.23 2.36 9.77 2.36ZM18.51 8.09 19.57 11.34 21.86 11.14 20.48 6.9Z" />
+    </svg>
+  );
+}
+
 function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} className="w-full rounded-2xl bg-primary py-4 font-display text-2xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40" />;
 }
@@ -36,9 +44,11 @@ function Index() {
   return (
     <div className="flex min-h-screen justify-center bg-muted">
       <div className="relative flex min-h-screen w-full max-w-[430px] flex-col bg-background">
-        {step === "splash" && <Splash onNext={() => setStep("register")} />}
-        {step === "register" && <Register onNext={() => setStep("app")} />}
-        {step === "app" && <AppShell />}
+        <div key={step} className="animate-screen-in flex min-h-0 flex-1 flex-col">
+          {step === "splash" && <Splash onNext={() => setStep("register")} />}
+          {step === "register" && <Register onNext={() => setStep("app")} />}
+          {step === "app" && <AppShell />}
+        </div>
       </div>
     </div>
   );
@@ -95,7 +105,7 @@ function AppShell() {
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <Crest size={30} /><span className="font-display text-xl tracking-wide">CD Lugo</span>
       </header>
-      <main className="flex-1 overflow-y-auto pb-28">
+      <main key={tab} className="animate-screen-in flex-1 overflow-y-auto pb-28">
         {tab === "cal" && <CalendarView />}
         {tab === "mode" && <ModeView />}
         {tab === "profile" && <ProfileView />}
@@ -107,7 +117,7 @@ function AppShell() {
             if (it.id === "mode")
               return (
                 <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
-                  <span className={`flex h-16 w-16 items-center justify-center rounded-full text-3xl ${active ? "bg-primary shadow-glow" : "bg-muted"}`}>⚽</span>
+                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" /></span>
                   <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
                 </button>
               );
@@ -187,7 +197,7 @@ function ModeView() {
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <button onClick={() => setOn(!on)} aria-label="Activar modo" className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card text-7xl transition active:scale-95">
             {on && <span className="absolute inset-0 rounded-full border-2 border-primary animate-pulse-ring" />}
-            <span className={on ? "animate-spin [animation-duration:6s]" : ""}>⚽</span>
+            <Ball className={`h-24 w-24 ${on ? "animate-spin [animation-duration:6s]" : ""}`} />
           </button>
           <p className="mt-2 font-display text-3xl">{m > 90 ? `90+${m - 90}` : m}'</p>
         </div>
@@ -210,8 +220,7 @@ function ProfileView() {
       </div>
       <div className="mt-6 rounded-3xl border border-primary/60 bg-card p-5">
         <div className="flex items-center justify-between"><p className="text-xs uppercase tracking-widest text-muted-foreground">Estado de socio</p><span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">ACTIVO</span></div>
-        <p className="mt-2 font-display text-2xl">Temporada 2026/27 · Tribuna</p>
-        <p className="text-sm text-muted-foreground">Total desconectado esta temporada: 14h 32m</p>
+        <p className="mt-2 font-display text-2xl">Temporada 2026/27</p>
       </div>
       <ul className="mt-6 divide-y divide-border rounded-3xl bg-card">
         {["Correo electrónico", "Teléfono móvil", "Número de socio", "Notificaciones"].map((l) => (
