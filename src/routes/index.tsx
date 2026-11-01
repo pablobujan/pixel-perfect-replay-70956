@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
+import { SESSION_LIMIT_SECONDS, useSessionTimer } from "@/hooks/use-session-timer";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -27,33 +28,20 @@ function Crest({ size = 96 }: { size?: number }) {
   );
 }
 
-const pent = (cx: number, cy: number, r: number, rot: number) =>
-  Array.from({ length: 5 }, (_, i) => {
-    const a = ((rot + i * 72) * Math.PI) / 180;
-    return `${(cx + r * Math.sin(a)).toFixed(2)},${(cy - r * Math.cos(a)).toFixed(2)}`;
-  }).join(" ");
-
 function Ball({ className = "", color = "var(--primary)" }: { className?: string; color?: string }) {
-  const outer = [0, 1, 2, 3, 4].map((i) => {
-    const a = ((36 + i * 72) * Math.PI) / 180;
-    return { x: 12 + 10.2 * Math.sin(a), y: 12 - 10.2 * Math.cos(a), rot: 36 + i * 72 };
-  });
   const id = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <defs>
-        <mask id={`m${id}`}>
-          <circle cx="12" cy="12" r="11" fill="white" />
-          <polygon points={pent(12, 12, 4.2, 0)} fill="black" />
-          {outer.map((o, i) => <polygon key={i} points={pent(o.x, o.y, 3.6, o.rot + 180)} fill="black" />)}
-          {[0, 1, 2, 3, 4].map((i) => {
-            const a = ((i * 72) * Math.PI) / 180;
-            return <line key={i} x1={12 + 4.2 * Math.sin(a)} y1={12 - 4.2 * Math.cos(a)} x2={12 + 7.4 * Math.sin(a)} y2={12 - 7.4 * Math.cos(a)} stroke="black" strokeWidth="1.1" />;
-          })}
-        </mask>
+        <clipPath id={`ball${id}`}><circle cx="12" cy="12" r="10.5" /></clipPath>
       </defs>
-      <circle cx="12" cy="12" r="11" fill={color} mask={`url(#m${id})`} />
-      <circle cx="12" cy="12" r="10.6" fill="none" stroke={color} strokeWidth="0.8" />
+      <circle cx="12" cy="12" r="10.5" fill="var(--card)" />
+      <g clipPath={`url(#ball${id})`} stroke={color} strokeWidth=".65" strokeLinejoin="round">
+        <path d="M12 7 L16.76 10.46 L14.94 16.05 H9.06 L7.24 10.46 Z" fill={color} />
+        <path d="M9 0 H15 L15.5 3.4 L12 5 L8.5 3.4 Z M0 6 L3.2 5.8 L5.4 9 L3.5 12 L0 11 Z M24 6 L20.8 5.8 L18.6 9 L20.5 12 L24 11 Z M2 21 L4.5 16.8 L8 17.2 L9 20.8 L6 24 Z M22 21 L19.5 16.8 L16 17.2 L15 20.8 L18 24 Z" fill={color} />
+        <path d="M12 7 V5 M7.24 10.46 L5.4 9 M16.76 10.46 L18.6 9 M9.06 16.05 L8 17.2 M14.94 16.05 L16 17.2 M8.5 3.4 L3.2 5.8 M15.5 3.4 L20.8 5.8 M3.5 12 L4.5 16.8 M20.5 12 L19.5 16.8 M9 20.8 H15" fill="none" />
+      </g>
+      <circle cx="12" cy="12" r="10.5" fill="none" stroke={color} strokeWidth="1" />
     </svg>
   );
 }
@@ -130,6 +118,7 @@ function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps)
 type Tab = "cal" | "mode" | "profile";
 function AppShell({ user, setUser }: UserProps) {
   const [tab, setTab] = useState<Tab>("mode");
+  const seconds = useSessionTimer();
   const items: { id: Tab; label: string }[] = [{ id: "cal", label: "Calendario" }, { id: "mode", label: "Anxo Carro" }, { id: "profile", label: "Perfil" }];
   return (
     <>
@@ -138,7 +127,7 @@ function AppShell({ user, setUser }: UserProps) {
       </header>
       <main key={tab} className="animate-screen-in flex-1 overflow-y-auto pb-28">
         {tab === "cal" && <CalendarView />}
-        {tab === "mode" && <ModeView />}
+        {tab === "mode" && <ModeView secs={seconds} />}
         {tab === "profile" && <ProfileView user={user} setUser={setUser} />}
       </main>
       <nav className="fixed bottom-0 w-full max-w-[430px] border-t border-border bg-card px-6 pb-4 pt-2">
@@ -213,20 +202,10 @@ function CalendarView() {
 
 const fmt = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
-function ModeView() {
-  const [on, setOn] = useState(false);
-  const [secs, setSecs] = useState(0);
-  const [minute, setMinute] = useState(23);
-  useEffect(() => {
-    const t = setInterval(() => {
-      setMinute((m) => Math.min(m + 1 / 60, 95));
-      if (on) setSecs((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(t);
-  }, [on]);
-  const pct = Math.min(minute / 90, 1);
+function ModeView({ secs }: { secs: number }) {
+  const pct = secs / SESSION_LIMIT_SECONDS;
   const R = 120, C = 2 * Math.PI * R;
-  const m = Math.floor(minute);
+  const m = Math.floor(secs / 60);
   return (
     <div className="flex flex-col items-center px-5 py-6 text-center">
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">● En directo · CD Lugo 1 - 0 Cultural</p>
@@ -234,20 +213,19 @@ function ModeView() {
       <div className="relative mt-6 h-[280px] w-[280px]">
         <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90">
           <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="14" fill="none" />
-          <circle cx="140" cy="140" r={R} stroke="var(--primary)" strokeWidth="14" fill="none" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} className="transition-all duration-1000" />
+          <circle cx="140" cy="140" r={R} stroke="var(--primary)" strokeWidth="14" fill="none" strokeLinecap="butt" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} className="transition-all duration-1000 motion-reduce:transition-none" />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <button onClick={() => setOn(!on)} aria-label="Activar modo" className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card text-7xl transition active:scale-95">
-            {on && <span className="absolute inset-0 rounded-full border-2 border-primary animate-pulse-ring" />}
-            <Ball className={`h-24 w-24 ${on ? "animate-spin [animation-duration:6s]" : ""}`} />
-          </button>
-          <p className="mt-2 font-display text-3xl">{m > 90 ? `90+${m - 90}` : m}'</p>
+          <div className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
+            <Ball className="h-24 w-24" />
+          </div>
+          <p className="mt-2 font-display text-3xl">{m}'</p>
         </div>
       </div>
       <div className="mt-6 w-full rounded-3xl bg-card p-5">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground">Tiempo desconectado</p>
-        <p className={`font-display text-6xl tracking-wider ${on ? "text-primary" : "text-silver"}`}>{fmt(secs)}</p>
-        <p className="text-sm text-muted-foreground">{on ? "¡Así se vive! Guarda el móvil y anima." : "Pulsa el balón para desconectar."}</p>
+        <p className="text-xs uppercase tracking-widest text-muted-foreground">Tiempo transcurrido</p>
+        <p className="font-display text-6xl tracking-wider text-primary" role="timer" aria-label="Tiempo transcurrido">{fmt(secs)}</p>
+        <p className="text-sm text-muted-foreground">{secs === SESSION_LIMIT_SECONDS ? "Sesión finalizada" : "Sesión en curso"}</p>
       </div>
     </div>
   );
