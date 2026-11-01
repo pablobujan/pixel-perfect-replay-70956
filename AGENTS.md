@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep session timing in a shell-mounted hook using wall-clock elapsed time, so tab changes and suspended browser callbacks cannot reset or slow the active session.
