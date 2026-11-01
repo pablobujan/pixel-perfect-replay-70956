@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { SESSION_LIMIT_SECONDS, useSessionTimer } from "@/hooks/use-session-timer";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
@@ -23,7 +24,7 @@ function Crest({ size = 96 }: { size?: number }) {
       <path d="M50 3 L95 15 V55 C95 85 72 103 50 112 C28 103 5 85 5 55 V15 Z" fill="var(--silver)" />
       <path d="M50 9 L89 19 V55 C89 81 69 97 50 105 C31 97 11 81 11 55 V19 Z" fill="var(--primary)" />
       <path d="M50 9 V105 C31 97 11 81 11 55 V19 Z" fill="var(--foreground)" opacity=".95" />
-      <text x="50" y="66" textAnchor="middle" fontFamily="Bebas Neue" fontSize="30" fill="var(--background)" stroke="var(--silver)" strokeWidth=".5">CDL</text>
+      <text x="50" y="66" textAnchor="middle" fontFamily="Geist, sans-serif" fontSize="25" fill="var(--background)" stroke="var(--silver)" strokeWidth=".5">CDL</text>
     </svg>
   );
 }
@@ -47,7 +48,7 @@ function Ball({ className = "", color = "var(--primary)" }: { className?: string
 }
 
 function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className="w-full rounded-2xl bg-primary py-4 font-display text-2xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40" />;
+  return <Button {...props} className="primary-action w-full" />;
 }
 
 type UserData = { name: string; email: string; phone: string; member: string; notif: boolean };
@@ -59,8 +60,8 @@ function Index() {
   const [step, setStep] = useState<"splash" | "register" | "app">("splash");
   const [user, setUser] = useState<UserData>({ name: "", email: "", phone: "", member: "", notif: true });
   return (
-    <div className="flex min-h-screen justify-center bg-muted">
-      <div className="relative flex min-h-screen w-full max-w-[430px] flex-col bg-background">
+    <div className="app-stage flex min-h-screen justify-center bg-muted">
+      <div className="app-frame relative flex min-h-screen w-full max-w-[480px] flex-col bg-background">
         <div key={step} className="animate-screen-in flex min-h-0 flex-1 flex-col">
           {step === "splash" && <Splash onNext={() => setStep("register")} />}
           {step === "register" && <Register user={user} setUser={setUser} onNext={() => setStep("app")} />}
@@ -73,14 +74,14 @@ function Index() {
 
 function Splash({ onNext }: { onNext: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-between px-8 py-16 text-center">
+    <div className="welcome-screen flex flex-1 flex-col items-center justify-between px-8 py-12 text-center">
       <div />
       <div className="flex flex-col items-center gap-8">
         <Crest size={130} />
         <div>
-          <h1 className="font-display text-6xl leading-none tracking-wide">Vive el partido</h1>
-          <p className="mt-2 font-display text-3xl tracking-wide text-primary">en el Anxo Carro</p>
-          <p className="mt-6 text-muted-foreground">Guarda el móvil. Cada minuto en la grada cuenta. Aquí se anima con el corazón, no con la pantalla.</p>
+          <h1 className="font-display text-4xl font-bold leading-tight">Vive el partido</h1>
+          <p className="mt-3 font-display text-2xl font-semibold text-primary">en el Anxo Carro</p>
+          <p className="mt-6 text-base leading-7 text-muted-foreground">Guarda el móvil. Cada minuto en la grada cuenta. Aquí se anima con el corazón, no con la pantalla.</p>
         </div>
       </div>
       <Btn onClick={onNext}>Comenzar</Btn>
@@ -90,9 +91,9 @@ function Splash({ onNext }: { onNext: () => void }) {
 
 function Field({ icon: Icon, ...p }: { icon: typeof Mail } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="flex items-center gap-3 rounded-xl border border-input px-4 py-3.5 focus-within:border-primary">
+    <label className="form-field flex items-center gap-3 rounded-lg border border-input bg-card px-4 py-4 focus-within:border-primary">
       <Icon className="h-5 w-5 text-muted-foreground" />
-      <input {...p} required className="w-full bg-transparent outline-none placeholder:text-muted-foreground" />
+      <input {...p} aria-label={p.placeholder} required className="w-full bg-transparent outline-none placeholder:text-muted-foreground" />
     </label>
   );
 }
@@ -100,10 +101,10 @@ function Field({ icon: Icon, ...p }: { icon: typeof Mail } & React.InputHTMLAttr
 function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps) {
   const bind = (k: "name" | "email" | "phone" | "member") => ({ value: user[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setUser({ ...user, [k]: e.target.value }) });
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onNext(); }} className="flex flex-1 flex-col px-6 py-10">
-      <div className="flex items-center gap-3"><Crest size={40} /><span className="font-display text-2xl tracking-wide">CD Lugo</span></div>
-      <h2 className="mt-10 font-display text-5xl tracking-wide">Identifícate</h2>
-      <p className="mb-8 text-muted-foreground">Acceso rápido para socios.</p>
+    <form onSubmit={(e) => { e.preventDefault(); onNext(); }} className="register-screen flex flex-1 flex-col px-7 py-9">
+      <div className="flex items-center gap-3"><Crest size={40} /><span className="font-display text-lg font-bold">CD Lugo</span></div>
+      <h2 className="mt-14 font-display text-3xl font-bold leading-tight">Identifícate</h2>
+      <p className="mb-9 mt-3 text-sm leading-6 text-muted-foreground">Acceso rápido para socios.</p>
       <div className="flex flex-col gap-4">
         <Field icon={User} placeholder="Nombre completo" {...bind("name")} />
         <Field icon={Mail} type="email" placeholder="Correo electrónico" {...bind("email")} />
@@ -122,30 +123,30 @@ function AppShell({ user, setUser }: UserProps) {
   const items: { id: Tab; label: string }[] = [{ id: "cal", label: "Calendario" }, { id: "mode", label: "Anxo Carro" }, { id: "profile", label: "Perfil" }];
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <Crest size={30} /><span className="font-display text-xl tracking-wide">CD Lugo</span>
+      <header className="app-header flex items-center gap-3 border-b border-border px-7 py-5">
+        <Crest size={30} /><span className="font-display text-base font-bold">CD Lugo</span>
       </header>
       <main key={tab} className="animate-screen-in flex-1 overflow-y-auto pb-28">
         {tab === "cal" && <CalendarView />}
         {tab === "mode" && <ModeView secs={seconds} />}
         {tab === "profile" && <ProfileView user={user} setUser={setUser} />}
       </main>
-      <nav className="fixed bottom-0 w-full max-w-[430px] border-t border-border bg-card px-6 pb-4 pt-2">
-        <div className="flex items-end justify-between">
+      <nav className="bottom-nav fixed bottom-0 w-full max-w-[480px] border-t border-border bg-card px-6 pb-4 pt-3">
+        <div className="flex items-center justify-between">
           {items.map((it) => {
             const active = tab === it.id;
             if (it.id === "mode")
               return (
-                <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
-                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
+                <Button variant="ghost" aria-current={active ? "page" : undefined} key={it.id} onClick={() => setTab("mode")} className="nav-item flex flex-col items-center gap-1">
+                  <span className={`flex h-10 w-14 items-center justify-center rounded-lg ${active ? "bg-primary shadow-sm" : "bg-muted"}`}><Ball className="nav-ball h-6 w-6" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
                   <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
-                </button>
+                </Button>
               );
             const Icon = it.id === "cal" ? Calendar : User;
             return (
-              <button key={it.id} onClick={() => setTab(it.id)} className={`flex w-20 flex-col items-center gap-1 py-2 ${active ? "text-primary" : "text-muted-foreground"}`}>
+              <Button variant="ghost" aria-current={active ? "page" : undefined} key={it.id} onClick={() => setTab(it.id)} className={`nav-item flex w-20 flex-col items-center gap-2 py-2 ${active ? "text-primary" : "text-muted-foreground"}`}>
                 <Icon className="h-6 w-6" /><span className="text-xs">{it.label}</span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -164,34 +165,34 @@ const past = [
 
 function CalendarView() {
   return (
-    <div className="px-5 py-6">
-      <h2 className="font-display text-4xl tracking-wide">Calendario</h2>
-      <div className="mt-4 rounded-3xl border border-primary/60 bg-card p-5 shadow-glow">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Próximo partido</p>
+    <div className="content-screen px-7 py-8">
+      <h2 className="font-display text-3xl font-bold leading-tight">Calendario</h2>
+      <div className="fixture-card mt-6 rounded-lg border border-border bg-card p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercasest text-primary">Próximo partido</p>
         <div className="mt-4 flex items-center justify-between">
           <div className="flex flex-col items-center gap-2"><Crest size={44} /><span className="text-sm font-semibold">CD Lugo</span></div>
-          <div className="text-center"><p className="font-display text-4xl">VS</p><p className="text-xs text-muted-foreground">Dom 2 nov · 18:00</p></div>
+          <div className="text-center"><p className="font-display text-2xl font-semibold text-muted-foreground">VS</p><p className="text-xs text-muted-foreground">Dom 2 nov · 18:00</p></div>
           <div className="flex flex-col items-center gap-2"><div className="flex h-[50px] w-11 items-center justify-center rounded-lg bg-muted font-display text-xl">CUL</div><span className="text-sm font-semibold">Cultural</span></div>
         </div>
         <p className="mt-4 text-center text-sm text-muted-foreground">Estadio Anxo Carro</p>
       </div>
-      <h3 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Últimos resultados</h3>
+      <h3 className="mb-3 mt-8 text-sm font-semibold uppercasest text-muted-foreground">Últimos resultados</h3>
       <ul className="flex flex-col gap-2">
         {past.map((m, i) => {
           const w = m.gf > m.ga ? "V" : m.gf === m.ga ? "E" : "D";
-          const badge = w === "V" ? "bg-win text-primary-foreground" : w === "E" ? "bg-muted text-silver" : "bg-primary text-primary-foreground";
+          const badge = w === "V" ? "bg-win-soft text-win" : w === "E" ? "bg-muted text-muted-foreground" : "bg-primary-soft text-primary";
           const [l, v] = m.home ? ["CD Lugo", m.rival] : [m.rival, "CD Lugo"];
           const [gl, gv] = m.home ? [m.gf, m.ga] : [m.ga, m.gf];
           const Where = m.home ? Home : Plane;
           return (
-            <li key={m.date} style={{ animationDelay: `${i * 70}ms` }} className="animate-screen-in flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
+            <li key={m.date} style={{ animationDelay: `${i * 70}ms` }} className="result-row animate-screen-in flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-4">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge}`}>{w}</span>
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-sm ${m.home ? "font-bold" : ""}`}>{l}</p>
                 <p className={`truncate text-sm ${!m.home ? "font-bold" : ""}`}>{v}</p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground"><Where className="h-3 w-3" />{m.home ? "En casa" : "Visitante"} · {m.date}</p>
               </div>
-              <div className="flex flex-col items-end font-display text-2xl leading-tight"><span>{gl}</span><span>{gv}</span></div>
+              <div className="flex flex-col items-end font-display text-lg font-semibold tabular-nums leading-6"><span>{gl}</span><span>{gv}</span></div>
             </li>
           );
         })}
@@ -207,25 +208,25 @@ function ModeView({ secs }: { secs: number }) {
   const R = 120, C = 2 * Math.PI * R;
   const m = Math.floor(secs / 60);
   return (
-    <div className="flex flex-col items-center px-5 py-6 text-center">
-      <p className="text-xs font-semibold uppercase tracking-widest text-primary">● En directo · CD Lugo 1 - 0 Cultural</p>
-      <h2 className="mt-1 font-display text-4xl tracking-wide">Modo Anxo Carro</h2>
-      <div className="relative mt-6 h-[280px] w-[280px]">
+    <div className="mode-screen flex flex-col items-center px-7 py-9 text-center">
+      <p className="live-status text-xs font-semibold text-primary">● En directo · CD Lugo 1 - 0 Cultural</p>
+      <h2 className="mt-5 font-display text-3xl font-bold leading-tight">Modo Anxo Carro</h2>
+      <div className="timer-ring relative mt-9 aspect-square w-full max-w-[280px]">
         <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90">
-          <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="14" fill="none" />
-          <circle cx="140" cy="140" r={R} stroke="var(--primary)" strokeWidth="14" fill="none" strokeLinecap="butt" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} className="transition-all duration-1000 motion-reduce:transition-none" />
+          <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="6" fill="none" />
+          <circle cx="140" cy="140" r={R} stroke="var(--primary)" strokeWidth="6" fill="none" strokeLinecap="butt" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} className="transition-all duration-1000 motion-reduce:transition-none" />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
-            <Ball className="h-24 w-24" />
+          <div className="ball-center relative flex h-32 w-32 items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
+            <Ball className="h-20 w-20" />
           </div>
-          <p className="mt-2 font-display text-3xl">{m}'</p>
+          <p className="mt-4 font-display text-xl font-semibold tabular-nums">{m}'</p>
         </div>
       </div>
-      <div className="mt-6 w-full rounded-3xl bg-card p-5">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground">Tiempo transcurrido</p>
-        <p className="font-display text-6xl tracking-wider text-primary" role="timer" aria-label="Tiempo transcurrido">{fmt(secs)}</p>
-        <p className="text-sm text-muted-foreground">{secs === SESSION_LIMIT_SECONDS ? "Sesión finalizada" : "Sesión en curso"}</p>
+      <div className="elapsed-panel mt-7 w-full border-t border-border py-7">
+        <p className="text-xs uppercasest text-muted-foreground">Tiempo transcurrido</p>
+        <p className="elapsed-digits mt-3 font-display text-5xl font-semibold tabular-nums text-foreground" role="timer" aria-label="Tiempo transcurrido">{fmt(secs)}</p>
+        <p className="session-status mt-4 text-xs text-muted-foreground">{secs === SESSION_LIMIT_SECONDS ? "Sesión finalizada" : "Sesión en curso"}</p>
       </div>
     </div>
   );
@@ -240,36 +241,36 @@ function ProfileView({ user, setUser }: UserProps) {
     { k: "member", l: "Número de socio", icon: IdCard },
   ];
   return (
-    <div className="px-5 py-6">
+    <div className="content-screen px-7 py-8">
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary font-display text-3xl text-primary-foreground">{initials(user.name)}</div>
-        <div><h2 className="font-display text-3xl tracking-wide">{shortName(user.name)}</h2><p className="text-sm text-muted-foreground">Socio nº {user.member || "—"}</p></div>
+        <div className="flex h-10 w-14 items-center justify-center rounded-lg bg-primary font-display text-3xl text-primary-foreground">{initials(user.name)}</div>
+        <div className="min-w-0"><h2 className="break-words font-display text-2xl font-bold leading-tight">{shortName(user.name)}</h2><p className="text-sm text-muted-foreground">Socio nº {user.member || "—"}</p></div>
       </div>
-      <div className="mt-6 rounded-3xl border border-primary/60 bg-card p-5">
-        <div className="flex items-center justify-between"><p className="text-xs uppercase tracking-widest text-muted-foreground">Estado de socio</p><span className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">ACTIVO</span></div>
-        <p className="mt-2 font-display text-2xl">Temporada 2026/27</p>
+      <div className="membership-card mt-8 rounded-lg border border-border bg-card p-5 shadow-sm">
+        <div className="flex items-center justify-between"><p className="text-xs uppercasest text-muted-foreground">Estado de socio</p><span className="rounded-md bg-win-soft px-3 py-1 text-xs font-semibold text-win">ACTIVO</span></div>
+        <p className="mt-4 font-display text-lg font-semibold">Temporada 2026/27</p>
       </div>
-      <ul className="mt-6 divide-y divide-border overflow-hidden rounded-3xl bg-card">
+      <ul className="profile-details mt-7 divide-y divide-border">
         {rows.map(({ k, l, icon: Icon }) => (
-          <li key={k} className="px-5 py-4">
-            <button onClick={() => setEdit(edit === k ? null : k)} className="flex w-full items-center gap-3 text-left">
+          <li key={k} className="py-5">
+            <Button variant="ghost" aria-expanded={edit === k} onClick={() => setEdit(edit === k ? null : k)} className="profile-row flex w-full items-center gap-3 text-left">
               <Icon className="h-5 w-5 text-muted-foreground" />
               <div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">{l}</p><p className="truncate">{user[k] || "—"}</p></div>
               <ChevronRight className={`h-5 w-5 text-muted-foreground transition-transform duration-300 ${edit === k ? "rotate-90" : ""}`} />
-            </button>
+            </Button>
             <div className={`grid transition-all duration-300 ease-out ${edit === k ? "mt-3 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
               <div className="overflow-hidden">
-                <input value={user[k]} onChange={(e) => setUser({ ...user, [k]: e.target.value })} placeholder={l} className="w-full rounded-xl border border-input bg-transparent px-4 py-3 outline-none focus:border-primary" />
+                <input aria-label={l} value={user[k]} onChange={(e) => setUser({ ...user, [k]: e.target.value })} placeholder={l} className="w-full rounded-xl border border-input bg-transparent px-4 py-3 outline-none focus:border-primary" />
               </div>
             </div>
           </li>
         ))}
-        <li className="flex items-center gap-3 px-5 py-4">
+        <li className="flex items-center gap-3 py-5">
           <Bell className="h-5 w-5 text-muted-foreground" />
           <span className="flex-1">Notificaciones</span>
-          <button role="switch" aria-checked={user.notif} aria-label="Notificaciones" onClick={() => setUser({ ...user, notif: !user.notif })} className={`relative h-8 w-14 rounded-full transition-colors duration-300 ${user.notif ? "bg-win" : "bg-muted"}`}>
-            <span className={`absolute top-1 h-6 w-6 rounded-full bg-foreground shadow transition-all duration-300 ${user.notif ? "left-7" : "left-1"}`} />
-          </button>
+          <Button variant="ghost" role="switch" aria-checked={user.notif} aria-label="Notificaciones" onClick={() => setUser({ ...user, notif: !user.notif })} className={`notification-switch relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300 ${user.notif ? "bg-win" : "bg-muted"}`}>
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-switch-thumb shadow-sm transition-all duration-300 ${user.notif ? "left-6" : "left-1"}`} />
+          </Button>
         </li>
       </ul>
     </div>
