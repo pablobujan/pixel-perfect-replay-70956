@@ -36,7 +36,7 @@ function Ball({ className = "", color = "var(--primary)" }: { className?: string
       <defs>
         <clipPath id={`ball${id}`}><circle cx="12" cy="12" r="10.5" /></clipPath>
       </defs>
-      <circle cx="12" cy="12" r="10.5" fill="var(--card)" />
+      <circle cx="12" cy="12" r="10.5" fill="var(--ball-surface, var(--card))" />
       <g clipPath={`url(#ball${id})`} stroke={color} strokeWidth=".65" strokeLinejoin="round">
         <path d="M12 7 L16.76 10.46 L14.94 16.05 H9.06 L7.24 10.46 Z" fill={color} />
         <path d="M9 0 H15 L15.5 3.4 L12 5 L8.5 3.4 Z M0 6 L3.2 5.8 L5.4 9 L3.5 12 L0 11 Z M24 6 L20.8 5.8 L18.6 9 L20.5 12 L24 11 Z M2 21 L4.5 16.8 L8 17.2 L9 20.8 L6 24 Z M22 21 L19.5 16.8 L16 17.2 L15 20.8 L18 24 Z" fill={color} />
@@ -243,7 +243,7 @@ function ProfileView({ user, setUser }: UserProps) {
   return (
     <div className="content-screen px-7 py-8">
       <div className="flex items-center gap-4">
-        <div className="flex h-10 w-14 items-center justify-center rounded-lg bg-primary font-display text-3xl text-primary-foreground">{initials(user.name)}</div>
+        <div className="profile-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary-soft font-display text-xl font-semibold text-primary">{initials(user.name)}</div>
         <div className="min-w-0"><h2 className="break-words font-display text-2xl font-bold leading-tight">{shortName(user.name)}</h2><p className="text-sm text-muted-foreground">Socio nº {user.member || "—"}</p></div>
       </div>
       <div className="membership-card mt-8 rounded-lg border border-border bg-card p-5 shadow-sm">
