@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - Keep session timing in a shell-mounted hook using wall-clock elapsed time, so tab changes and suspended browser callbacks cannot reset or slow the active session.
+- Keep screen styling in semantic global design tokens and scoped screen classes, using the shared Button for interactions, so visual redesigns leave session and profile logic unchanged.
