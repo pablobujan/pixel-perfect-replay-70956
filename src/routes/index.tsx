@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type * as React from "react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 import {
@@ -26,6 +26,16 @@ import {
   sendFanSnapshot,
 } from "@/lib/fan-sheet";
 import { useNow } from "@/hooks/use-now";
+import { AdminPanel } from "@/components/admin-panel";
+import {
+  DEFAULT_MATCHES,
+  loadMatchesFromSheet,
+  matchLabel,
+  partitionMatches,
+  readCachedMatches,
+  type Match,
+  type MatchesState,
+} from "@/lib/matches";
 
 // ==========================================
 // CONFIGURACIÓN DE LA RUTA (TanStack Router)
@@ -128,8 +138,6 @@ function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
 // ==========================================
 type UserData = { name: string; email: string; phone: string; member: string; notif: boolean; consent: boolean };
 type UserProps = { user: UserData; setUser: (u: UserData) => void };
-type MatchType = { rival: string; gf?: number; ga?: number; date: string; home: boolean; kickoffAt?: string };
-type MatchesState = { past: MatchType[]; next: MatchType[] };
 type Step = "splash" | "register" | "app";
 
 type PersistedState = {
@@ -386,6 +394,7 @@ export default function Index() {
   const [step, setStep] = useState<Step>("splash");
   const [user, setUser] = useState<UserData>(DEFAULT_USER);
   const [hydrated, setHydrated] = useState(false);
+  const hydratedOnceRef = useRef(false);
 
   // Sesión de desconexión. joinedAt/joinedKickoffAt son marcas de tiempo reales:
   // así el cronómetro no se reinicia ni se ralentiza al cambiar de pestaña.
@@ -449,36 +458,20 @@ export default function Index() {
   // ?demo=10 simula que han pasado 10 minutos de partido (útil para probar
   // descanso, 2ª parte y final sin esperar a la hora real del kickoff).
   const [demoKickoffAt, setDemoKickoffAt] = useState<number | null>(null);
+  // ?prueba=1 marca los envíos como "Prueba" sin tocar el reloj: así se puede
+  // ensayar un partido entero sin que esos minutos entren en el ranking.
+  const [testSession, setTestSession] = useState(false);
+  // ?admin=1 abre el panel privado del calendario.
+  const [adminVisible, setAdminVisible] = useState(false);
 
-  const [matches] = useState<MatchesState>({
-    past: [
-      { rival: "CP Cacereño", gf: 1, ga: 0, date: "06 NOV · 19:00", home: false },
-      { rival: "AD Mérida", gf: 2, ga: 1, date: "01 NOV", home: true },
-    ],
-    next: [
-      {
-        rival: "Mirandés",
-        // Jornada 12: domingo 15/11/2026 a las 16:30 (hora peninsular).
-        date: "15 NOV · 16:30",
-        home: true,
-        kickoffAt: "2026-11-15T16:30:00+01:00",
-      },
-      {
-        rival: "Pontevedra",
-        date: "21 NOV · 18:45",
-        home: false,
-        kickoffAt: "2026-11-21T18:45:00+01:00",
-      },
-      {
-        rival: "UD Ourense",
-        date: "29 NOV · 19:00",
-        home: true,
-        kickoffAt: "2026-11-29T19:00:00+01:00",
-      },
-    ],
-  });
+  // Calendario: copia local al instante y, en segundo plano, la versión de la
+  // hoja (que es la buena si el panel se ha usado desde otro móvil).
+  const [matchList, setMatchList] = useState<Match[]>(() => readCachedMatches() ?? DEFAULT_MATCHES);
+  const matches = useMemo(() => partitionMatches(matchList), [matchList]);
 
   const currentMatch = matches.next[0];
+  const currentMatchRival = currentMatch?.rival ?? "";
+  const currentMatchDate = currentMatch?.date ?? "";
   const scheduledKickoffAt = parseKickoff(currentMatch?.kickoffAt);
   const kickoffAt = demoKickoffAt ?? scheduledKickoffAt;
   const matchTimer = kickoffAt === null ? -1 : matchElapsedSeconds(kickoffAt, now);
@@ -505,7 +498,10 @@ export default function Index() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = new URLSearchParams(window.location.search).get("demo");
+    const params = new URLSearchParams(window.location.search);
+    setTestSession(params.has("prueba"));
+    setAdminVisible(params.has("admin"));
+    const raw = params.get("demo");
     if (raw === null) return;
     const minutes = Number(raw);
     if (!Number.isFinite(minutes)) return;
@@ -517,6 +513,31 @@ export default function Index() {
     const state = getNotificationState();
     setNotificationState(state);
     if (state === "granted") void registerNotificationWorker();
+  }, []);
+
+  // Calendario remoto: se carga al abrir, al volver a la app y cada 5 minutos.
+  // Si la hoja no responde se queda la copia local, sin romper nada.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    const sync = async () => {
+      const list = await loadMatchesFromSheet();
+      if (!cancelled && list && list.length > 0) setMatchList(list);
+    };
+
+    void sync();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void sync();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(() => void sync(), 5 * 60_000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
   }, []);
 
   // Preferencia de avisos del perfil, accesible desde `markAway`.
@@ -534,8 +555,11 @@ export default function Index() {
   }, []);
 
   // Recupera la sesión guardada. Se hace en un efecto (no en el inicializador)
-  // para que el primer render coincida entre servidor y cliente.
+  // para que el primer render coincida entre servidor y cliente. Solo una vez:
+  // el calendario remoto puede llegar después y no debe repetir la restauración.
   useEffect(() => {
+    if (hydratedOnceRef.current) return;
+    hydratedOnceRef.current = true;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -1076,8 +1100,8 @@ export default function Index() {
             member: user.member,
             phone: user.phone,
             email: user.email,
-            match: currentMatch ? `CD Lugo vs ${currentMatch.rival}` : "CD Lugo",
-            matchDate: currentMatch?.date ?? "",
+            match: currentMatchRival ? `CD Lugo vs ${currentMatchRival}` : "CD Lugo",
+            matchDate: currentMatchDate,
             kickoffAt: new Date(joinedKickoffAt).toISOString(),
             joinedAt: new Date(joinedAt).toISOString(),
             joinedMinute: Math.max(
@@ -1089,7 +1113,7 @@ export default function Index() {
             awayCount: ranges.length,
             status: elapsed >= TOTAL_MATCH_DURATION ? "finished" : "active",
             consent: true,
-            demo: demoKickoffAt !== null,
+            demo: demoKickoffAt !== null || testSession,
           },
           id,
         ),
@@ -1126,9 +1150,24 @@ export default function Index() {
     user.email,
     joinedAt,
     joinedKickoffAt,
-    currentMatch,
+    currentMatchRival,
+    currentMatchDate,
     demoKickoffAt,
+    testSession,
   ]);
+
+  const exitAdmin = () => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("admin");
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // Sin history seguimos: el panel se oculta igual.
+    }
+    setAdminVisible(false);
+  };
+
+  if (adminVisible) return <AdminPanel onExit={exitAdmin} />;
 
   return (
     <div className="flex min-h-screen justify-center bg-muted">
@@ -1311,7 +1350,7 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
       
       {currentNext ? (
         <div className="mt-4 rounded-3xl border border-primary/60 bg-card p-5 shadow-glow">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">Próximo partido · Jornada 12</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">Próximo partido{currentNext.matchday ? ` · Jornada ${currentNext.matchday}` : ""}</p>
           <div className="mt-4 flex items-center justify-between">
             <div className="flex flex-col items-center gap-2">
               <TeamCrest name={currentNext.home ? "CD Lugo" : currentNext.rival} className="w-12 h-12" />
@@ -1365,13 +1404,13 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
           const [gl, gv] = m.home ? [gf, ga] : [ga, gf];
           const Where = m.home ? Home : Plane;
           return (
-            <li key={m.date + i} className="animate-screen-in flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
+            <li key={m.id + i} className="animate-screen-in flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge}`}>{w}</span>
               <TeamCrest name={m.rival} className="w-7 h-7 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-sm ${m.home ? "font-bold" : ""}`}>{l}</p>
                 <p className={`truncate text-sm ${!m.home ? "font-bold" : ""}`}>{v}</p>
-                <p className="flex items-center gap-1 text-xs text-muted-foreground"><Where className="h-3 w-3" />{m.home ? "En casa" : "Visitante"} · {m.date}</p>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground"><Where className="h-3 w-3" />{m.home ? "En casa" : "Visitante"} · {matchLabel(m.kickoffAt, m.date)}</p>
               </div>
               <div className="flex flex-col items-end font-display text-2xl leading-tight"><span>{gl}</span><span>{gv}</span></div>
             </li>
@@ -1389,7 +1428,7 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
   // o, si no la hay, la que se deduce del kickoff.
   const kickoffTimeLabel = (() => {
     if (!currentMatch) return "";
-    const timePart = currentMatch.date.split("·")[1]?.trim();
+    const timePart = matchLabel(currentMatch.kickoffAt, currentMatch.date).split("·")[1]?.trim();
     if (timePart) return timePart;
     const kickoff = parseKickoff(currentMatch.kickoffAt);
     if (kickoff === null) return "";

@@ -216,7 +216,11 @@ function postBeacon(endpoint: string, payload: FanSnapshot): boolean {
   }
 }
 
-async function postFetch(endpoint: string, payload: FanSnapshot): Promise<boolean> {
+/**
+ * POST “ciego” a la web app de Apps Script. Con `no-cors` la respuesta es
+ * opaca: llegar aquí solo significa que el navegador lo envió.
+ */
+export async function postSheetPayload(endpoint: string, payload: unknown): Promise<boolean> {
   try {
     await fetch(endpoint, {
       method: "POST",
@@ -225,12 +229,16 @@ async function postFetch(endpoint: string, payload: FanSnapshot): Promise<boolea
       body: JSON.stringify(payload),
       keepalive: true,
     });
-    // Con `no-cors` la respuesta es opaca: llegar aquí ya es un éxito.
-    dropQueuedSession(payload.sessionId);
     return true;
   } catch {
     return false;
   }
+}
+
+async function postFetch(endpoint: string, payload: FanSnapshot): Promise<boolean> {
+  const ok = await postSheetPayload(endpoint, payload);
+  if (ok) dropQueuedSession(payload.sessionId);
+  return ok;
 }
 
 /**
