@@ -274,6 +274,12 @@ function MatchEditor({
   const [played, setPlayed] = useState(initial.played);
   const [gf, setGf] = useState(initial.gf === undefined ? "" : String(initial.gf));
   const [ga, setGa] = useState(initial.ga === undefined ? "" : String(initial.ga));
+  const [addedFirst, setAddedFirst] = useState(
+    initial.addedFirst ? String(initial.addedFirst) : "",
+  );
+  const [addedSecond, setAddedSecond] = useState(
+    initial.addedSecond ? String(initial.addedSecond) : "",
+  );
   const [error, setError] = useState("");
 
   const submit = () => {
@@ -309,10 +315,20 @@ function MatchEditor({
       if (Number.isFinite(value)) match.ga = Math.trunc(value);
     }
 
+    // Descuento del árbitro: 0 o vacío significa que no se añade nada.
+    const extra1 = Math.trunc(Number(addedFirst));
+    if (Number.isFinite(extra1) && extra1 > 0) match.addedFirst = Math.min(extra1, 30);
+    const extra2 = Math.trunc(Number(addedSecond));
+    if (Number.isFinite(extra2) && extra2 > 0) match.addedSecond = Math.min(extra2, 30);
+
     void onSave(match);
   };
 
   const label = matchLabel(fromLocalInput(kickoff) || initial.kickoffAt, date);
+  const extraParts: string[] = [];
+  if (Number(addedFirst) > 0) extraParts.push(`+${Math.trunc(Number(addedFirst))}'`);
+  if (Number(addedSecond) > 0) extraParts.push(`+${Math.trunc(Number(addedSecond))}'`);
+  const extraLabel = extraParts.length > 0 ? ` · descuento ${extraParts.join(" / ")}` : "";
 
   return (
     <section className="rounded-2xl border border-border bg-card p-4">
@@ -320,7 +336,7 @@ function MatchEditor({
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</p>
           <h2 className="truncate font-display text-2xl tracking-wide">{rival.trim() || "Sin nombre"}</h2>
-          <p className="text-xs text-muted-foreground">{label || "Sin fecha"}</p>
+          <p className="text-xs text-muted-foreground">{label || "Sin fecha"}{extraLabel}</p>
         </div>
         {onDelete && (
           <button
@@ -363,6 +379,36 @@ function MatchEditor({
             />
           </label>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-xs text-muted-foreground">
+            Descuento 1ª parte (min)
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={addedFirst}
+              onChange={(event) => setAddedFirst(event.target.value)}
+              placeholder="0"
+              className={`mt-1 ${inputClass}`}
+            />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            Descuento 2ª parte (min)
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={addedSecond}
+              onChange={(event) => setAddedSecond(event.target.value)}
+              placeholder="0"
+              className={`mt-1 ${inputClass}`}
+            />
+          </label>
+        </div>
+        <p className="-mt-1 text-[11px] leading-snug text-muted-foreground">
+          Minutos que añade el árbitro. El reloj y los minutos del premio llegan hasta el 90 + descuento.
+        </p>
 
         <label className="text-xs text-muted-foreground">
           Etiqueta visible (opcional)
