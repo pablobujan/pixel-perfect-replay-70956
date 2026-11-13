@@ -11,27 +11,67 @@ export const HT_END = FIRST_HALF_DURATION + HT_DURATION;
 export const TOTAL_MATCH_DURATION = FIRST_HALF_DURATION + HT_DURATION + SECOND_HALF_DURATION;
 
 /**
+ * Minutos que el árbitro añade en cada parte. Se guardan por partido en el
+ * panel (`?admin=1`) y alargan el reloj: si hay +3 en la segunda parte, el
+ * partido no termina hasta el 90+3.
+ */
+export type MatchExtra = { firstHalfSeconds: number; secondHalfSeconds: number };
+
+export const NO_MATCH_EXTRA: MatchExtra = { firstHalfSeconds: 0, secondHalfSeconds: 0 };
+
+export type MatchTiming = {
+  firstHalf: number;
+  htStart: number;
+  htEnd: number;
+  secondHalf: number;
+  total: number;
+};
+
+const clampExtra = (seconds: number): number =>
+  Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+
+/** Límites del partido teniendo en cuenta el descuento de cada parte. */
+export function matchTiming(extra: MatchExtra = NO_MATCH_EXTRA): MatchTiming {
+  const firstHalf = FIRST_HALF_DURATION + clampExtra(extra.firstHalfSeconds);
+  const secondHalf = SECOND_HALF_DURATION + clampExtra(extra.secondHalfSeconds);
+  const htStart = firstHalf;
+  const htEnd = firstHalf + HT_DURATION;
+  return {
+    firstHalf,
+    htStart,
+    htEnd,
+    secondHalf,
+    total: firstHalf + HT_DURATION + secondHalf,
+  };
+}
+
+/**
  * Segundos de partido transcurridos desde el kickoff.
  * -1 = el partido aún no ha empezado.
- * Se limita a TOTAL_MATCH_DURATION para que el reloj se quede en el 90'.
+ * Se limita al final del partido (90' + descuentos) para que el reloj no siga.
  */
-export function matchElapsedSeconds(kickoffAt: number, now: number): number {
+export function matchElapsedSeconds(
+  kickoffAt: number,
+  now: number,
+  extra: MatchExtra = NO_MATCH_EXTRA,
+): number {
   const elapsed = Math.floor((now - kickoffAt) / 1000);
   if (elapsed < 0) return -1;
-  return Math.min(elapsed, TOTAL_MATCH_DURATION);
+  return Math.min(elapsed, matchTiming(extra).total);
 }
 
 /** Progreso del círculo: 0 en el kickoff, 0.5 al descanso, 1 al final. */
-export function matchProgressPct(timer: number): number {
+export function matchProgressPct(timer: number, extra: MatchExtra = NO_MATCH_EXTRA): number {
   if (timer < 0) return 0;
-  if (timer <= FIRST_HALF_DURATION) {
-    return (timer / FIRST_HALF_DURATION) * 0.5;
+  const timing = matchTiming(extra);
+  if (timer <= timing.firstHalf) {
+    return (timer / timing.firstHalf) * 0.5;
   }
-  if (timer <= HT_END) {
+  if (timer <= timing.htEnd) {
     return 0.5;
   }
-  if (timer < TOTAL_MATCH_DURATION) {
-    return 0.5 + ((timer - HT_END) / SECOND_HALF_DURATION) * 0.5;
+  if (timer < timing.total) {
+    return 0.5 + ((timer - timing.htEnd) / timing.secondHalf) * 0.5;
   }
   return 1;
 }
@@ -39,10 +79,11 @@ export function matchProgressPct(timer: number): number {
 /**
  * ¿El reloj está en el descanso? Durante el HT el cronómetro ya está pausado
  * por el propio partido: una salida de la web no debe cambiar el mensaje ni
- * sumar una pausa extra.
+ * sumar una pausa extra. El descuento de la primera parte cuenta como juego.
  */
-export function isHalfTime(timer: number): boolean {
-  return timer > FIRST_HALF_DURATION && timer <= HT_END;
+export function isHalfTime(timer: number, extra: MatchExtra = NO_MATCH_EXTRA): boolean {
+  const timing = matchTiming(extra);
+  return timer > timing.firstHalf && timer <= timing.htEnd;
 }
 
 function overlapMs(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
@@ -53,11 +94,17 @@ function overlapMs(aStart: number, aEnd: number, bStart: number, bEnd: number): 
  * Milisegundos de juego real entre dos instantes. Excluye el descanso y todo lo
  * anterior al kickoff, así el cronómetro de desconexión se pausa solo en el HT.
  */
-export function activePlayMsBetween(start: number, end: number, kickoffAt: number): number {
+export function activePlayMsBetween(
+  start: number,
+  end: number,
+  kickoffAt: number,
+  extra: MatchExtra = NO_MATCH_EXTRA,
+): number {
+  const timing = matchTiming(extra);
   const firstHalfStart = kickoffAt;
-  const firstHalfEnd = kickoffAt + FIRST_HALF_DURATION * 1000;
-  const secondHalfStart = kickoffAt + HT_END * 1000;
-  const secondHalfEnd = kickoffAt + TOTAL_MATCH_DURATION * 1000;
+  const firstHalfEnd = kickoffAt + timing.firstHalf * 1000;
+  const secondHalfStart = kickoffAt + timing.htEnd * 1000;
+  const secondHalfEnd = kickoffAt + timing.total * 1000;
 
   return (
     overlapMs(start, end, firstHalfStart, firstHalfEnd) +
@@ -66,8 +113,13 @@ export function activePlayMsBetween(start: number, end: number, kickoffAt: numbe
 }
 
 /** Segundos de desconexión acumulados desde que el socio entró al modo fan. */
-export function disconnectionSeconds(joinedAt: number, now: number, kickoffAt: number): number {
-  return Math.floor(activePlayMsBetween(joinedAt, now, kickoffAt) / 1000);
+export function disconnectionSeconds(
+  joinedAt: number,
+  now: number,
+  kickoffAt: number,
+  extra: MatchExtra = NO_MATCH_EXTRA,
+): number {
+  return Math.floor(activePlayMsBetween(joinedAt, now, kickoffAt, extra) / 1000);
 }
 
 /** Intervalo en el que el socio estuvo fuera de la app. `end: null` = sigue fuera. */
@@ -78,11 +130,16 @@ export type AwayRange = { start: number; end: number | null };
  * Si un intervalo sigue abierto (`end: null`) se mide hasta `now`, por lo que
  * restarlo del total deja el cronómetro congelado mientras está fuera.
  */
-export function awayActivePlayMs(ranges: AwayRange[], now: number, kickoffAt: number): number {
+export function awayActivePlayMs(
+  ranges: AwayRange[],
+  now: number,
+  kickoffAt: number,
+  extra: MatchExtra = NO_MATCH_EXTRA,
+): number {
   return ranges.reduce((total, range) => {
     const end = Math.min(range.end ?? now, now);
     if (end <= range.start) return total;
-    return total + activePlayMsBetween(range.start, end, kickoffAt);
+    return total + activePlayMsBetween(range.start, end, kickoffAt, extra);
   }, 0);
 }
 
@@ -96,9 +153,10 @@ export function effectiveDisconnectionSeconds(
   now: number,
   kickoffAt: number,
   awayRanges: AwayRange[],
+  extra: MatchExtra = NO_MATCH_EXTRA,
 ): number {
-  const total = activePlayMsBetween(joinedAt, now, kickoffAt);
-  const away = awayActivePlayMs(awayRanges, now, kickoffAt);
+  const total = activePlayMsBetween(joinedAt, now, kickoffAt, extra);
+  const away = awayActivePlayMs(awayRanges, now, kickoffAt, extra);
   return Math.max(0, Math.floor(Math.max(0, total - away) / 1000));
 }
 
@@ -150,9 +208,10 @@ export function awayProgressRanges(
   now: number,
   kickoffAt: number,
   joinedAt: number,
+  extra: MatchExtra = NO_MATCH_EXTRA,
 ): ProgressRange[] {
   const from = Math.max(kickoffAt, joinedAt);
-  const to = Math.min(now, kickoffAt + TOTAL_MATCH_DURATION * 1000);
+  const to = Math.min(now, kickoffAt + matchTiming(extra).total * 1000);
   if (to <= from) return [];
 
   const segments: ProgressRange[] = [];
@@ -162,8 +221,8 @@ export function awayProgressRanges(
     const endMs = Math.min(range.end ?? now, to);
     if (endMs <= startMs) continue;
 
-    const start = matchProgressPct(matchElapsedSeconds(kickoffAt, startMs));
-    const end = matchProgressPct(matchElapsedSeconds(kickoffAt, endMs));
+    const start = matchProgressPct(matchElapsedSeconds(kickoffAt, startMs, extra), extra);
+    const end = matchProgressPct(matchElapsedSeconds(kickoffAt, endMs, extra), extra);
     if (end > start) segments.push({ start, end });
   }
 

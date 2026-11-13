@@ -57,6 +57,8 @@ var MATCH_HEADERS = [
   "GF", // H
   "GA", // I
   "Actualizado", // J
+  "Desc. 1ª", // K (minutos añadidos por el árbitro)
+  "Desc. 2ª", // L
 ];
 
 // Calendario inicial: solo se escribe si la pestaña "Partidos" está vacía.
@@ -314,10 +316,23 @@ function getMatchesSheet_() {
     sheet.setColumnWidth(1, 200);
     sheet.setColumnWidth(2, 160);
     sheet.setColumnWidth(3, 200);
+  } else {
+    // Hojas creadas antes del descuento: añade las columnas K y L sin tocar los
+    // partidos que ya hubiera.
+    var header = sheet.getRange(1, 1, 1, MATCH_HEADERS.length).getValues()[0];
+    for (var i = 0; i < MATCH_HEADERS.length; i++) {
+      if (!String(header[i] || "").trim()) {
+        sheet.getRange(1, 1, 1, MATCH_HEADERS.length).setValues([MATCH_HEADERS]);
+        sheet.setFrozenRows(1);
+        break;
+      }
+    }
   }
 
   // El kickoff se guarda como texto para que Sheets no lo convierta a su antojo.
   sheet.getRange("C2:C").setNumberFormat("@");
+  // Descuento en minutos: número entero (vacío = sin descuento).
+  sheet.getRange("K2:L").setNumberFormat("0");
   return sheet;
 }
 
@@ -359,6 +374,8 @@ function readMatches_() {
       played: bool_(row[6]),
       gf: numberOrNull_(row[7]),
       ga: numberOrNull_(row[8]),
+      addedFirst: numberOrNull_(row[10]),
+      addedSecond: numberOrNull_(row[11]),
     });
   }
 
@@ -387,6 +404,8 @@ function buildMatchRow_(match) {
     numberOrBlank_(match.gf),
     numberOrBlank_(match.ga),
     nowLabel_(),
+    extraMinutes_(match.addedFirst),
+    extraMinutes_(match.addedSecond),
   ];
 }
 
@@ -447,6 +466,13 @@ function numberOrNull_(value) {
 function numberOrBlank_(value) {
   var n = numberOrNull_(value);
   return n === null ? "" : n;
+}
+
+/** Descuento del árbitro: entero entre 1 y 30, o vacío si no hay. */
+function extraMinutes_(value) {
+  var n = numberOrNull_(value);
+  if (n === null || n <= 0) return "";
+  return Math.min(n, 30);
 }
 
 function bool_(value) {

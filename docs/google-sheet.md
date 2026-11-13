@@ -84,6 +84,8 @@ hoja y se edita desde la propia app.
    móvil.
 3. Puedes:
    - cambiar rival, fecha/hora, jornada, casa/fuera y resultado;
+   - poner el **descuento del árbitro** de cada parte (por ejemplo 2 y 5). El
+     reloj y los minutos del premio llegan hasta el 90+descuento;
    - marcar **Ya jugado** para que pase a "Últimos resultados";
    - **Añadir partido** para crear uno nuevo;
    - **borrar** con el icono de la papelera;
@@ -97,7 +99,8 @@ ella y cada 5 minutos. No hay que tocar código ni volver a publicar la web.
 
 > La pestaña `Partidos` se puede editar también a mano en Google Sheets, pero
 > es más fácil desde el panel: la app espera la columna C en ISO
-> (`2026-11-15T16:30:00+01:00`) y la E/G como `Sí`/`No`.
+> (`2026-11-15T16:30:00+01:00`), la E/G como `Sí`/`No` y el descuento en
+> minutos en las columnas K y L (vacío = sin descuento).
 
 ## 6. Ensayo antes del partido (`?demo=`)
 

@@ -5,16 +5,17 @@ import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } 
 
 import {
   FIRST_HALF_DURATION,
-  HT_END,
-  TOTAL_MATCH_DURATION,
+  SECOND_HALF_DURATION,
   awayActivePlayMs,
   awayProgressRanges,
   effectiveDisconnectionSeconds,
   isHalfTime,
   matchElapsedSeconds,
   matchProgressPct,
+  matchTiming,
   restoreAwayRanges,
   type AwayRange,
+  type MatchExtra,
   type ProgressRange,
 } from "@/lib/match-clock";
 import {
@@ -473,19 +474,33 @@ export default function Index() {
   const currentMatchRival = currentMatch?.rival ?? "";
   const currentMatchDate = currentMatch?.date ?? "";
   const scheduledKickoffAt = parseKickoff(currentMatch?.kickoffAt);
+
+  // Descuento del árbitro del partido en juego. Si la sesión empezó con otro
+  // partido, se toma el descuento de ese partido para no mezclarlos.
+  const extraMatch =
+    joinedKickoffAt !== null
+      ? matchList.find((item) => parseKickoff(item.kickoffAt) === joinedKickoffAt) ?? currentMatch
+      : currentMatch;
+  const extraFirstMinutes = extraMatch?.addedFirst ?? 0;
+  const extraSecondMinutes = extraMatch?.addedSecond ?? 0;
+  const matchExtra: MatchExtra = {
+    firstHalfSeconds: extraFirstMinutes * 60,
+    secondHalfSeconds: extraSecondMinutes * 60,
+  };
+
   const kickoffAt = demoKickoffAt ?? scheduledKickoffAt;
-  const matchTimer = kickoffAt === null ? -1 : matchElapsedSeconds(kickoffAt, now);
+  const matchTimer = kickoffAt === null ? -1 : matchElapsedSeconds(kickoffAt, now, matchExtra);
 
   const joinedFanMode = joinedAt !== null;
   const discSeconds =
     joinedAt !== null && joinedKickoffAt !== null
-      ? effectiveDisconnectionSeconds(joinedAt, now, joinedKickoffAt, awayRanges)
+      ? effectiveDisconnectionSeconds(joinedAt, now, joinedKickoffAt, awayRanges, matchExtra)
       : 0;
 
   // Tramos del círculo que van en gris por haber estado fuera de la app.
   const awaySegments: ProgressRange[] =
     joinedAt !== null && joinedKickoffAt !== null
-      ? awayProgressRanges(awayRanges, now, joinedKickoffAt, joinedAt)
+      ? awayProgressRanges(awayRanges, now, joinedKickoffAt, joinedAt, matchExtra)
       : [];
 
   // Progreso del partido al entrar al modo fan, calculado con la línea
@@ -493,7 +508,7 @@ export default function Index() {
   // simulación (?demo) y taparía el rojo con gris.
   const preFanProgress =
     joinedAt !== null && kickoffAt !== null
-      ? matchProgressPct(matchElapsedSeconds(kickoffAt, joinedAt))
+      ? matchProgressPct(matchElapsedSeconds(kickoffAt, joinedAt, matchExtra), matchExtra)
       : null;
 
   useEffect(() => {
@@ -1090,9 +1105,13 @@ export default function Index() {
       const id = sessionIdRef.current;
       if (!id || joinedAt === null || joinedKickoffAt === null) return;
       const nowMs = Date.now();
+      const extra: MatchExtra = {
+        firstHalfSeconds: extraFirstMinutes * 60,
+        secondHalfSeconds: extraSecondMinutes * 60,
+      };
       const ranges = awayRangesRef.current;
-      const awayMs = awayActivePlayMs(ranges, nowMs, joinedKickoffAt);
-      const elapsed = matchElapsedSeconds(joinedKickoffAt, nowMs);
+      const awayMs = awayActivePlayMs(ranges, nowMs, joinedKickoffAt, extra);
+      const elapsed = matchElapsedSeconds(joinedKickoffAt, nowMs, extra);
       sendFanSnapshot(
         buildFanSnapshot(
           {
@@ -1106,12 +1125,12 @@ export default function Index() {
             joinedAt: new Date(joinedAt).toISOString(),
             joinedMinute: Math.max(
               0,
-              Math.floor(matchElapsedSeconds(joinedKickoffAt, joinedAt) / 60),
+              Math.floor(matchElapsedSeconds(joinedKickoffAt, joinedAt, extra) / 60),
             ),
-            fanSeconds: effectiveDisconnectionSeconds(joinedAt, nowMs, joinedKickoffAt, ranges),
+            fanSeconds: effectiveDisconnectionSeconds(joinedAt, nowMs, joinedKickoffAt, ranges, extra),
             awaySeconds: Math.floor(awayMs / 1000),
             awayCount: ranges.length,
-            status: elapsed >= TOTAL_MATCH_DURATION ? "finished" : "active",
+            status: elapsed >= matchTiming(extra).total ? "finished" : "active",
             consent: true,
             demo: demoKickoffAt !== null || testSession,
           },
@@ -1152,6 +1171,8 @@ export default function Index() {
     joinedKickoffAt,
     currentMatchRival,
     currentMatchDate,
+    extraFirstMinutes,
+    extraSecondMinutes,
     demoKickoffAt,
     testSession,
   ]);
@@ -1192,6 +1213,8 @@ export default function Index() {
               onEnableLockGuard={enableLockGuard}
               awaySegments={awaySegments}
               preFanProgress={preFanProgress}
+              matchExtra={matchExtra}
+              extraSecondMinutes={extraSecondMinutes}
             />
           )}
         </div>
@@ -1278,7 +1301,7 @@ function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps)
 }
 
 type Tab = "cal" | "mode" | "profile";
-function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress }: UserProps & { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null }) {
+function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraSecondMinutes }: UserProps & { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraSecondMinutes: number }) {
   const [tab, setTab] = useState<Tab>("mode");
   const items: { id: Tab; label: string }[] = [{ id: "cal", label: "Calendario" }, { id: "mode", label: "Anxo Carro" }, { id: "profile", label: "Perfil" }];
   
@@ -1304,6 +1327,8 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
             onEnableLockGuard={onEnableLockGuard}
             awaySegments={awaySegments}
             preFanProgress={preFanProgress}
+            matchExtra={matchExtra}
+            extraSecondMinutes={extraSecondMinutes}
           />
         )}
         {tab === "profile" && (
@@ -1421,7 +1446,7 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
   );
 }
 
-function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress }: { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null }) {
+function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraSecondMinutes }: { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraSecondMinutes: number }) {
   const currentMatch = matchesState.next[0];
 
   // Hora del partido para la cabecera: la que viene en `date` ("21 NOV · 18:45")
@@ -1443,23 +1468,30 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
   let displayMatchClock = "0'";
 
   // ¿Descanso? El HT manda: el cronómetro ya está pausado por el partido.
-  const isDuringHalfTime = isHalfTime(matchTimer);
+  const timing = matchTiming(matchExtra);
+  const isDuringHalfTime = isHalfTime(matchTimer, matchExtra);
 
-  if (matchTimer >= 0 && matchTimer <= FIRST_HALF_DURATION) {
+  if (matchTimer >= 0 && matchTimer <= timing.firstHalf) {
     const mins = Math.floor(matchTimer / 60);
     phaseText = "● 1ª PARTE EN JUEGO";
-    displayMatchClock = `${mins}'`;
+    displayMatchClock =
+      matchTimer > FIRST_HALF_DURATION
+        ? `45+${Math.floor((matchTimer - FIRST_HALF_DURATION) / 60) + 1}'`
+        : `${mins}'`;
   } else if (isDuringHalfTime) {
     phaseText = "⏸ DESCANSO";
     displayMatchClock = "HT";
-  } else if (matchTimer > HT_END && matchTimer < TOTAL_MATCH_DURATION) {
-    const secondHalfTimer = matchTimer - HT_END;
+  } else if (matchTimer > timing.htEnd && matchTimer < timing.total) {
+    const secondHalfTimer = matchTimer - timing.htEnd;
     const mins = 45 + Math.floor(secondHalfTimer / 60);
     phaseText = "● 2ª PARTE EN JUEGO";
-    displayMatchClock = `${mins}'`;
-  } else if (matchTimer >= TOTAL_MATCH_DURATION) {
+    displayMatchClock =
+      matchTimer > timing.htEnd + SECOND_HALF_DURATION
+        ? `90+${Math.floor((matchTimer - timing.htEnd - SECOND_HALF_DURATION) / 60) + 1}'`
+        : `${mins}'`;
+  } else if (matchTimer >= timing.total) {
     phaseText = "🏁 PARTIDO FINALIZADO";
-    displayMatchClock = "90'";
+    displayMatchClock = extraSecondMinutes > 0 ? `90+${extraSecondMinutes}'` : "90'";
   }
 
   // Si el socio sale de la web, el modo fan queda en pausa hasta que vuelve.
@@ -1472,7 +1504,7 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
   // la web; en el descanso el parón es del partido, no una penalización.
   const fanLooksActive = joinedFanMode && (!isAway || isDuringHalfTime);
 
-  const progressPct = matchProgressPct(matchTimer);
+  const progressPct = matchProgressPct(matchTimer, matchExtra);
 
   // Gris = partido jugado fuera del modo fan. Rojo = partido jugado en modo fan.
   // Si no hay datos de entrada, todo el tramo jugado se pinta en gris.

@@ -92,6 +92,32 @@ describe("normalizeMatch", () => {
     expect(normalizeMatch({ id: "", rival: "Y", kickoffAt: "2026-11-15T16:30:00+01:00" })).toBeNull();
     expect(normalizeMatch(null)).toBeNull();
   });
+
+  it("lee el descuento del árbitro de las columnas K y L", () => {
+    const match = normalizeMatch({
+      id: "mirandes",
+      rival: "Mirandés",
+      kickoffAt: "2026-11-15T16:30:00+01:00",
+      addedFirst: "2",
+      addedSecond: 5,
+    });
+
+    expect(match?.addedFirst).toBe(2);
+    expect(match?.addedSecond).toBe(5);
+  });
+
+  it("no guarda descuentos vacíos, cero o negativos", () => {
+    const match = normalizeMatch({
+      id: "mirandes",
+      rival: "Mirandés",
+      kickoffAt: "2026-11-15T16:30:00+01:00",
+      addedFirst: "",
+      addedSecond: "-3",
+    });
+
+    expect(match?.addedFirst).toBeUndefined();
+    expect(match?.addedSecond).toBeUndefined();
+  });
 });
 
 describe("caché local", () => {

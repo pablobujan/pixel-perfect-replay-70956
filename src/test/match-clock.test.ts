@@ -4,6 +4,7 @@ import {
   FIRST_HALF_DURATION,
   HT_END,
   HT_START,
+  SECOND_HALF_DURATION,
   TOTAL_MATCH_DURATION,
   awayProgressRanges,
   effectiveDisconnectionSeconds,
@@ -11,7 +12,9 @@ import {
   isHalfTime,
   matchElapsedSeconds,
   matchProgressPct,
+  matchTiming,
   restoreAwayRanges,
+  type MatchExtra,
 } from "@/lib/match-clock";
 
 const KICKOFF = Date.UTC(2026, 10, 21, 17, 45);
@@ -178,5 +181,73 @@ describe("match clock", () => {
         shortAwayMs: 20_000,
       }),
     ).toEqual([{ start: at(600), end: at(1200) }]);
+  });
+});
+
+describe("descuento del árbitro", () => {
+  const extra: MatchExtra = { firstHalfSeconds: 3 * 60, secondHalfSeconds: 5 * 60 };
+
+  it("alarga cada parte y el final del partido", () => {
+    const timing = matchTiming(extra);
+
+    expect(timing.firstHalf).toBe(48 * 60);
+    expect(timing.htStart).toBe(48 * 60);
+    expect(timing.htEnd).toBe(66 * 60);
+    expect(timing.secondHalf).toBe(50 * 60);
+    expect(timing.total).toBe(48 * 60 + 18 * 60 + 50 * 60);
+  });
+
+  it("deja el reloj en el 90 + descuento, sin pasarse", () => {
+    const timing = matchTiming(extra);
+
+    expect(matchElapsedSeconds(KICKOFF, at(timing.total - 1), extra)).toBe(timing.total - 1);
+    expect(matchElapsedSeconds(KICKOFF, at(timing.total), extra)).toBe(timing.total);
+    expect(matchElapsedSeconds(KICKOFF, at(timing.total + 600), extra)).toBe(timing.total);
+  });
+
+  it("cuenta el descuento de la 1ª parte como juego, no como descanso", () => {
+    const timing = matchTiming(extra);
+
+    expect(isHalfTime(timing.firstHalf, extra)).toBe(false);
+    expect(isHalfTime(timing.firstHalf + 1, extra)).toBe(true);
+    expect(isHalfTime(timing.htEnd, extra)).toBe(true);
+    expect(isHalfTime(timing.htEnd + 1, extra)).toBe(false);
+  });
+
+  it("reparte el círculo entre las dos partes con descuento", () => {
+    const timing = matchTiming(extra);
+
+    expect(matchProgressPct(timing.firstHalf, extra)).toBe(0.5);
+    expect(matchProgressPct(timing.htEnd, extra)).toBe(0.5);
+    expect(matchProgressPct(timing.total, extra)).toBe(1);
+    expect(matchProgressPct(timing.htEnd + (timing.secondHalf / 2), extra)).toBeCloseTo(0.75);
+  });
+
+  it("suma el descuento a los minutos del premio", () => {
+    const timing = matchTiming(extra);
+
+    expect(disconnectionSeconds(at(0), at(timing.total), KICKOFF, extra)).toBe(98 * 60);
+  });
+
+  it("pinta gris un rato fuera durante el descuento de la 2ª parte", () => {
+    const timing = matchTiming(extra);
+    const awayStart = at(timing.htEnd + SECOND_HALF_DURATION + 60);
+    const awayEnd = at(timing.htEnd + SECOND_HALF_DURATION + 180);
+
+    const segments = awayProgressRanges(
+      [{ start: awayStart, end: awayEnd }],
+      at(timing.total),
+      KICKOFF,
+      at(0),
+      extra,
+    );
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0]!.start).toBeCloseTo(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION + 60, extra));
+    expect(segments[0]!.end).toBeCloseTo(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION + 180, extra));
+  });
+
+  it("ignora descuentos negativos o no numéricos", () => {
+    expect(matchTiming({ firstHalfSeconds: -60, secondHalfSeconds: Number.NaN })).toEqual(matchTiming());
   });
 });

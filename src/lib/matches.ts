@@ -23,6 +23,10 @@ export type Match = {
   played: boolean;
   gf?: number;
   ga?: number;
+  /** Minutos que añade el árbitro en la primera parte (0 o vacío = ninguno). */
+  addedFirst?: number;
+  /** Minutos que añade el árbitro en la segunda parte. */
+  addedSecond?: number;
 };
 
 export type MatchesState = { past: Match[]; next: Match[] };
@@ -161,6 +165,12 @@ export function normalizeMatch(input: unknown): Match | null {
   const ga = num(row["ga"]);
   if (ga !== null) match.ga = ga;
 
+  const addedFirst = num(row["addedFirst"]);
+  if (addedFirst !== null && addedFirst > 0) match.addedFirst = addedFirst;
+
+  const addedSecond = num(row["addedSecond"]);
+  if (addedSecond !== null && addedSecond > 0) match.addedSecond = addedSecond;
+
   return match;
 }
 
@@ -289,6 +299,8 @@ const matchKey = (match: Match): string => {
     match.matchday ?? 0,
     match.gf ?? "",
     match.ga ?? "",
+    match.addedFirst ?? 0,
+    match.addedSecond ?? 0,
   ].join("|");
 };
 
