@@ -17,6 +17,14 @@ import {
   type AwayRange,
   type ProgressRange,
 } from "@/lib/match-clock";
+import {
+  buildFanSnapshot,
+  flushFanSheetQueue,
+  isFanSheetEnabled,
+  makeSessionId,
+  pendingFanSheetCount,
+  sendFanSnapshot,
+} from "@/lib/fan-sheet";
 import { useNow } from "@/hooks/use-now";
 
 // ==========================================
@@ -118,7 +126,7 @@ function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
 // ==========================================
 // TIPOS Y CONSTANTES
 // ==========================================
-type UserData = { name: string; email: string; phone: string; member: string; notif: boolean };
+type UserData = { name: string; email: string; phone: string; member: string; notif: boolean; consent: boolean };
 type UserProps = { user: UserData; setUser: (u: UserData) => void };
 type MatchType = { rival: string; gf?: number; ga?: number; date: string; home: boolean; kickoffAt?: string };
 type MatchesState = { past: MatchType[]; next: MatchType[] };
@@ -139,12 +147,15 @@ type PersistedState = {
   // Tiempo que la página siguió viva desde que empezó la ausencia. Distingue
   // salir a otra app (sigue latiendo) de apagar la pantalla (se congela).
   awayAliveMs?: number;
+  // Identificador de la sesión de modo fan: es la clave con la que la hoja de
+  // Google actualiza la fila del socio (una fila por sesión, no por envío).
+  fanSessionId?: string | null;
 };
 
 // v2: invalida las sesiones guardadas durante las pruebas en directo.
 const STORAGE_KEY = "anxo-carro:v2";
 
-const DEFAULT_USER: UserData = { name: "", email: "", phone: "", member: "", notif: true };
+const DEFAULT_USER: UserData = { name: "", email: "", phone: "", member: "", notif: true, consent: false };
 
 /**
  * Guarda las ausencias en el acto. En el móvil el navegador puede congelar la
@@ -167,7 +178,7 @@ const persistAwayRanges = (ranges: AwayRange[]) => {
  * el resto del estado guardado. Se hace de forma síncrona porque el navegador
  * puede congelar o descartar la pestaña justo después.
  */
-const persistSessionMeta = (patch: { leftPageAt?: number | null; locked?: boolean; awayAliveMs?: number }) => {
+const persistSessionMeta = (patch: { leftPageAt?: number | null; locked?: boolean; awayAliveMs?: number; fanSessionId?: string | null }) => {
   if (typeof window === "undefined") return;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -202,6 +213,10 @@ const SHORT_AWAY_MS = 20_000;
 const AWAY_ALIVE_THRESHOLD_MS = 20_000;
 const AWAY_HEARTBEAT_MS = 2_000;
 const AWAY_HEARTBEAT_PERSIST_MS = 5_000;
+// Cada cuánto se manda el estado del socio a la hoja de Google mientras dura
+// el modo fan. Con 30 s, como mucho se pierden los últimos 30 s si el móvil
+// muere; al salir de la app se manda además un envío inmediato (sendBeacon).
+const SHEET_HEARTBEAT_MS = 30_000;
 // Margen para cancelar la ausencia recién cerrada cuando la prueba de bloqueo
 // llega tarde (la pestaña estaba congelada y el evento se entrega al volver).
 // Es corto a propósito: un gris legítimo de hace un rato no se toca. Coincide
@@ -377,6 +392,10 @@ export default function Index() {
   const [joinedAt, setJoinedAt] = useState<number | null>(null);
   const [joinedKickoffAt, setJoinedKickoffAt] = useState<number | null>(null);
   const [joinedMatchTimer, setJoinedMatchTimer] = useState<number | null>(null);
+  // Identificador de esta sesión de modo fan. La hoja de Google hace upsert por
+  // este id, así que sobrevive a recargas y no duplica filas.
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   // Ratos fuera de la app. El cronómetro se congela mientras `isAway` es true
   // y se reactiva (vuelve el rojo) en cuanto el socio regresa.
@@ -537,6 +556,15 @@ export default function Index() {
           setJoinedKickoffAt(typeof saved.joinedKickoffAt === "number" ? saved.joinedKickoffAt : null);
           setJoinedMatchTimer(typeof saved.joinedMatchTimer === "number" ? saved.joinedMatchTimer : 0);
 
+          // La sesión de la hoja se recupera con el socio. Si viene de una
+          // versión anterior sin id, se genera uno y se guarda ya mismo.
+          const savedSessionId =
+            typeof saved.fanSessionId === "string" ? saved.fanSessionId.trim() : "";
+          const restoredSessionId = savedSessionId || makeSessionId();
+          sessionIdRef.current = restoredSessionId;
+          setSessionId(restoredSessionId);
+          if (!savedSessionId) persistSessionMeta({ fanSessionId: restoredSessionId });
+
           // Si la pestaña murió estando fuera, el último intervalo queda
           // abierto y hay que decidir qué hacer al volver:
           // - Si se abandonó la página (pagehide: otra web, cerrar pestaña),
@@ -564,6 +592,8 @@ export default function Index() {
         } else {
           awayRangesRef.current = [];
           setAwayRanges([]);
+          sessionIdRef.current = null;
+          setSessionId(null);
         }
       }
     } catch {
@@ -585,6 +615,7 @@ export default function Index() {
         leftPageAt: leftPageAtRef.current,
         locked: lockedPersistRef.current,
         awayAliveMs: awayAliveMsRef.current,
+        fanSessionId: sessionIdRef.current,
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
@@ -988,6 +1019,11 @@ export default function Index() {
     setJoinedAt(Date.now());
     setJoinedKickoffAt(kickoffAt);
     setJoinedMatchTimer(matchTimer >= 0 ? matchTimer : 0);
+    // Cada entrada al modo fan abre una sesión nueva para la hoja.
+    const newSessionId = makeSessionId();
+    sessionIdRef.current = newSessionId;
+    setSessionId(newSessionId);
+    persistSessionMeta({ fanSessionId: newSessionId });
     awayRangesRef.current = [];
     setAwayRanges([]);
     persistAwayRanges([]);
@@ -1007,6 +1043,92 @@ export default function Index() {
     // móvil cortaría la racha. Primero el escudo, y después el aviso.
     void startScreenLockDetection(true).then(() => enableNotifications());
   };
+
+  // Reintenta los envíos que quedaron sin red al abrir la app o al recuperar
+  // conexión. No toca el modo fan: solo vacía la cola de la hoja.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    flushFanSheetQueue();
+    window.addEventListener("online", flushFanSheetQueue);
+    return () => window.removeEventListener("online", flushFanSheetQueue);
+  }, [sessionId]);
+
+  // Envío del estado del socio a la hoja de Google (una fila por sesión).
+  // Solo si ha marcado el consentimiento del premio. Las sesiones simuladas
+  // con `?demo=` también se mandan (marcadas como "Prueba" en la hoja) para
+  // poder ensayar los minutos antes del partido. Se lee siempre el estado
+  // actual de los refs: los minutos son los mismos que se ven en el cronómetro.
+  useEffect(() => {
+    if (!joinedFanMode || !sessionId || !user.consent) return;
+    if (!isFanSheetEnabled()) return;
+
+    const push = (beacon: boolean) => {
+      const id = sessionIdRef.current;
+      if (!id || joinedAt === null || joinedKickoffAt === null) return;
+      const nowMs = Date.now();
+      const ranges = awayRangesRef.current;
+      const awayMs = awayActivePlayMs(ranges, nowMs, joinedKickoffAt);
+      const elapsed = matchElapsedSeconds(joinedKickoffAt, nowMs);
+      sendFanSnapshot(
+        buildFanSnapshot(
+          {
+            name: user.name,
+            member: user.member,
+            phone: user.phone,
+            email: user.email,
+            match: currentMatch ? `CD Lugo vs ${currentMatch.rival}` : "CD Lugo",
+            matchDate: currentMatch?.date ?? "",
+            kickoffAt: new Date(joinedKickoffAt).toISOString(),
+            joinedAt: new Date(joinedAt).toISOString(),
+            joinedMinute: Math.max(
+              0,
+              Math.floor(matchElapsedSeconds(joinedKickoffAt, joinedAt) / 60),
+            ),
+            fanSeconds: effectiveDisconnectionSeconds(joinedAt, nowMs, joinedKickoffAt, ranges),
+            awaySeconds: Math.floor(awayMs / 1000),
+            awayCount: ranges.length,
+            status: elapsed >= TOTAL_MATCH_DURATION ? "finished" : "active",
+            consent: true,
+            demo: demoKickoffAt !== null,
+          },
+          id,
+        ),
+        { beacon },
+      );
+    };
+
+    // Alta inmediata y latido periódico (también marca el final del partido).
+    push(false);
+    const timer = window.setInterval(() => push(false), SHEET_HEARTBEAT_MS);
+
+    // Al ocultar o abandonar la página se usa sendBeacon: el navegador puede
+    // congelar o cerrar la pestaña y un fetch normal no llegaría a salir.
+    const handleHidden = () => {
+      if (document.visibilityState === "hidden") push(true);
+    };
+    const handlePageHide = () => push(true);
+
+    document.addEventListener("visibilitychange", handleHidden);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleHidden);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [
+    joinedFanMode,
+    sessionId,
+    user.consent,
+    user.name,
+    user.member,
+    user.phone,
+    user.email,
+    joinedAt,
+    joinedKickoffAt,
+    currentMatch,
+    demoKickoffAt,
+  ]);
 
   return (
     <div className="flex min-h-screen justify-center bg-muted">
@@ -1035,7 +1157,7 @@ export default function Index() {
           )}
         </div>
         {debugVisible && (
-          <pre className="fixed inset-x-0 bottom-0 z-50 max-h-52 overflow-auto whitespace-pre-wrap break-words bg-black/85 p-2 text-[10px] leading-tight text-white">
+          <pre className="pointer-events-none fixed inset-x-0 bottom-0 z-50 max-h-52 overflow-auto whitespace-pre-wrap break-words bg-black/85 p-2 text-[10px] leading-tight text-white">
             {[
               `idleDetector: ${getIdleDetector() ? "sí" : "no"}`,
               `escudo: ${lockGuard}`,
@@ -1046,6 +1168,8 @@ export default function Index() {
               `detector: ${lastScreenStateRef.current ?? "?"} / ${lastUserStateRef.current ?? "?"}`,
               `ranges: ${awayRanges.map((r) => `${Math.round((r.start - (joinedAt ?? 0)) / 1000)}s→${r.end === null ? "abierto" : `${Math.round((r.end - (joinedAt ?? 0)) / 1000)}s`}`).join(", ") || "—"}`,
               `now: ${new Date().toLocaleTimeString()}`,
+              `hoja: ${isFanSheetEnabled() ? "on" : "off"} / consent: ${user.consent === true} / cola: ${pendingFanSheetCount()}`,
+              `sesión hoja: ${sessionIdRef.current ?? "—"}`,
               `ua: ${typeof navigator === "undefined" ? "?" : navigator.userAgent}`,
             ].join("\n")}
           </pre>
@@ -1094,6 +1218,21 @@ function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps)
         <Field icon={Phone} type="tel" placeholder="Teléfono móvil" {...bind("phone")} />
         <Field icon={IdCard} inputMode="numeric" placeholder="Número de socio" {...bind("member")} />
       </div>
+      <label className="mt-6 flex items-start gap-3 text-left text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={user.consent === true}
+          onChange={(e) => setUser({ ...user, consent: e.target.checked })}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--primary)]"
+        />
+        <span>
+          Quiero participar en el premio del partido. Autorizo que se envíen mi nombre, teléfono y
+          email al CD Lugo solo para gestionar el premio.
+        </span>
+      </label>
+      <p className="mt-2 text-xs leading-snug text-muted-foreground">
+        Si no lo marcas, la app funciona igual, pero tus minutos no entran en el premio.
+      </p>
       <div className="mt-auto pt-8"><Btn type="submit">Entrar al Anxo Carro</Btn></div>
     </form>
   );
@@ -1544,6 +1683,24 @@ function ProfileView({ user, setUser, notificationState, onEnableNotifications }
           </p>
         </li>
       </ul>
+      <div className="mt-6 rounded-3xl bg-card p-5">
+        <label className="flex items-start gap-3 text-left text-sm">
+          <input
+            type="checkbox"
+            aria-label="Participar en el premio del partido"
+            checked={user.consent === true}
+            onChange={(e) => setUser({ ...user, consent: e.target.checked })}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--primary)]"
+          />
+          <span>
+            Participar en el premio del partido
+            <span className="mt-1 block text-xs leading-snug text-muted-foreground">
+              Se envían tu nombre, teléfono, email y minutos al CD Lugo solo para el premio. Si lo
+              desmarcas, la app sigue funcionando pero no apareces en la lista.
+            </span>
+          </span>
+        </label>
+      </div>
     </div>
   );
 }
