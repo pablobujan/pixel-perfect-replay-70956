@@ -60,18 +60,25 @@ export function matchElapsedSeconds(
   return Math.min(elapsed, matchTiming(extra).total);
 }
 
-/** Progreso del círculo: 0 en el kickoff, 0.5 al descanso, 1 al final. */
+/**
+ * Progreso del círculo: 0 en el kickoff, 0.5 a los 45' y 1 a los 90'.
+ *
+ * El descuento del árbitro no estira el círculo: a los 45' el aro se queda a la
+ * mitad mientras el reloj sigue en 45+1, 45+2…; en la 2ª parte se llena a los
+ * 90' y se queda lleno hasta el final del descuento.
+ */
 export function matchProgressPct(timer: number, extra: MatchExtra = NO_MATCH_EXTRA): number {
   if (timer < 0) return 0;
   const timing = matchTiming(extra);
-  if (timer <= timing.firstHalf) {
-    return (timer / timing.firstHalf) * 0.5;
+  if (timer <= FIRST_HALF_DURATION) {
+    return (timer / FIRST_HALF_DURATION) * 0.5;
   }
   if (timer <= timing.htEnd) {
     return 0.5;
   }
-  if (timer < timing.total) {
-    return 0.5 + ((timer - timing.htEnd) / timing.secondHalf) * 0.5;
+  const secondHalfTimer = timer - timing.htEnd;
+  if (secondHalfTimer < SECOND_HALF_DURATION) {
+    return 0.5 + (secondHalfTimer / SECOND_HALF_DURATION) * 0.5;
   }
   return 1;
 }
@@ -164,19 +171,15 @@ export function effectiveDisconnectionSeconds(
  * Reconstruye los tramos de ausencia guardados al recargar/abrir la app.
  *
  * Un tramo abierto significa que la pestaña murió (o se congeló) estando
- * fuera. Al volver hay que decidir si ese hueco cuenta como ausencia o no:
- * - `leftPage`: la página se abandonó de verdad (`pagehide`: otra web, cerrar
- *   pestaña). El hueco completo es ausencia, así que se cierra al volver.
- * - `aliveMs`: cuánto tiempo siguió viva la página desde que empezó la
- *   ausencia. Si aguantó viva (pantalla encendida, otra app delante), la
- *   salida es real. Si el latido se cortó de inmediato, fue apagado de
- *   pantalla y el tramo se descarta: apagar el móvil nunca resta minutos.
- * - Ausencias muy cortas se perdonan (evita grises por rozar el móvil).
+ * fuera. Ese hueco cuenta como ausencia y se cierra al volver: si el socio
+ * apagó la pantalla o cerró la web, el cronómetro no debe seguir sumando como
+ * si estuviera en modo fan. Las ausencias muy cortas se perdonan para evitar
+ * grises por rozar el móvil.
  */
 export function restoreAwayRanges(
   ranges: AwayRange[],
   now: number,
-  opts: { leftPage: boolean; aliveMs: number; shortAwayMs: number },
+  opts: { shortAwayMs: number },
 ): AwayRange[] {
   const closed: AwayRange[] = [];
   const open: AwayRange[] = [];
@@ -186,9 +189,6 @@ export function restoreAwayRanges(
     else open.push({ start: range.start, end: null });
   }
   if (open.length === 0) return closed;
-
-  const definiteExit = opts.leftPage || opts.aliveMs >= opts.shortAwayMs;
-  if (!definiteExit) return closed;
 
   const start = Math.min(...open.map((r) => r.start));
   if (now - start < opts.shortAwayMs) return closed;

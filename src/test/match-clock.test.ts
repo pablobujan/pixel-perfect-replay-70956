@@ -129,58 +129,22 @@ describe("match clock", () => {
     ).toEqual([]);
   });
 
-  it("closes an open away range when the page was left on purpose", () => {
-    const restored = restoreAwayRanges(
-      [
-        { start: at(600), end: at(900) },
-        { start: at(1200), end: null },
-      ],
-      at(1800),
-      { leftPage: true, aliveMs: 0, shortAwayMs: 20_000 },
-    );
-
-    expect(restored).toEqual([
+  it("cierra cualquier hueco abierto al volver, aunque se apagara la pantalla", () => {
+    const ranges = [
       { start: at(600), end: at(900) },
-      { start: at(1200), end: at(1800) },
+      { start: at(1200), end: null },
+    ];
+
+    expect(restoreAwayRanges(ranges, at(3600), { shortAwayMs: 20_000 })).toEqual([
+      { start: at(600), end: at(900) },
+      { start: at(1200), end: at(3600) },
     ]);
   });
 
-  it("drops an open range if the page froze right after leaving (screen off)", () => {
-    const restored = restoreAwayRanges([{ start: at(1200), end: null }], at(3600), {
-      leftPage: false,
-      aliveMs: 4_000,
-      shortAwayMs: 20_000,
-    });
-
-    expect(restored).toEqual([]);
-  });
-
-  it("counts the gap when the page kept running while away (screen on)", () => {
-    const restored = restoreAwayRanges([{ start: at(1200), end: null }], at(3600), {
-      leftPage: false,
-      aliveMs: 60_000,
-      shortAwayMs: 20_000,
-    });
-
-    expect(restored).toEqual([{ start: at(1200), end: at(3600) }]);
-  });
-
-  it("forgives very short open gaps and pagehide wins over a frozen heartbeat", () => {
+  it("perdona huecos muy cortos al volver", () => {
     expect(
-      restoreAwayRanges([{ start: at(1200), end: null }], at(1210), {
-        leftPage: true,
-        aliveMs: 0,
-        shortAwayMs: 20_000,
-      }),
+      restoreAwayRanges([{ start: at(1200), end: null }], at(1210), { shortAwayMs: 20_000 }),
     ).toEqual([]);
-
-    expect(
-      restoreAwayRanges([{ start: at(600), end: null }], at(1200), {
-        leftPage: true,
-        aliveMs: 0,
-        shortAwayMs: 20_000,
-      }),
-    ).toEqual([{ start: at(600), end: at(1200) }]);
   });
 });
 
@@ -214,13 +178,16 @@ describe("descuento del árbitro", () => {
     expect(isHalfTime(timing.htEnd + 1, extra)).toBe(false);
   });
 
-  it("reparte el círculo entre las dos partes con descuento", () => {
+  it("deja el aro a la mitad a los 45' y lleno a los 90'", () => {
     const timing = matchTiming(extra);
 
     expect(matchProgressPct(timing.firstHalf, extra)).toBe(0.5);
+    expect(matchProgressPct(FIRST_HALF_DURATION + 90, extra)).toBe(0.5);
     expect(matchProgressPct(timing.htEnd, extra)).toBe(0.5);
+    expect(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION / 2, extra)).toBeCloseTo(0.75);
+    expect(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION, extra)).toBe(1);
+    expect(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION + 90, extra)).toBe(1);
     expect(matchProgressPct(timing.total, extra)).toBe(1);
-    expect(matchProgressPct(timing.htEnd + (timing.secondHalf / 2), extra)).toBeCloseTo(0.75);
   });
 
   it("suma el descuento a los minutos del premio", () => {
@@ -229,22 +196,19 @@ describe("descuento del árbitro", () => {
     expect(disconnectionSeconds(at(0), at(timing.total), KICKOFF, extra)).toBe(98 * 60);
   });
 
-  it("pinta gris un rato fuera durante el descuento de la 2ª parte", () => {
+  it("descuenta del premio un rato fuera durante el descuento aunque el aro ya esté lleno", () => {
     const timing = matchTiming(extra);
-    const awayStart = at(timing.htEnd + SECOND_HALF_DURATION + 60);
-    const awayEnd = at(timing.htEnd + SECOND_HALF_DURATION + 180);
+    const away = [
+      {
+        start: at(timing.htEnd + SECOND_HALF_DURATION + 60),
+        end: at(timing.htEnd + SECOND_HALF_DURATION + 180),
+      },
+    ];
 
-    const segments = awayProgressRanges(
-      [{ start: awayStart, end: awayEnd }],
-      at(timing.total),
-      KICKOFF,
-      at(0),
-      extra,
+    expect(effectiveDisconnectionSeconds(at(0), at(timing.total), KICKOFF, away, extra)).toBe(
+      98 * 60 - 120,
     );
-
-    expect(segments).toHaveLength(1);
-    expect(segments[0]!.start).toBeCloseTo(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION + 60, extra));
-    expect(segments[0]!.end).toBeCloseTo(matchProgressPct(timing.htEnd + SECOND_HALF_DURATION + 180, extra));
+    expect(awayProgressRanges(away, at(timing.total), KICKOFF, at(0), extra)).toEqual([]);
   });
 
   it("ignora descuentos negativos o no numéricos", () => {
