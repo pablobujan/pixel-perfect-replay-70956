@@ -129,21 +129,45 @@ describe("match clock", () => {
     ).toEqual([]);
   });
 
-  it("cierra cualquier hueco abierto al volver, aunque se apagara la pantalla", () => {
+  const awayOpts = (overrides: Partial<Parameters<typeof restoreAwayRanges>[2]> = {}) => ({
+    leftPage: false,
+    aliveMs: 0,
+    aliveThresholdMs: 2_000,
+    shortAwayMs: 20_000,
+    ...overrides,
+  });
+
+  it("cierra el hueco abierto si se salió de la web (pagehide)", () => {
     const ranges = [
       { start: at(600), end: at(900) },
       { start: at(1200), end: null },
     ];
 
-    expect(restoreAwayRanges(ranges, at(3600), { shortAwayMs: 20_000 })).toEqual([
+    expect(restoreAwayRanges(ranges, at(3600), awayOpts({ leftPage: true }))).toEqual([
       { start: at(600), end: at(900) },
       { start: at(1200), end: at(3600) },
     ]);
   });
 
+  it("cierra el hueco si la página siguió viva al ocultarse", () => {
+    expect(
+      restoreAwayRanges([{ start: at(1200), end: null }], at(3600), awayOpts({ aliveMs: 5_000 })),
+    ).toEqual([{ start: at(1200), end: at(3600) }]);
+  });
+
+  it("descarta el hueco si se apagó la pantalla desde la web (latido cortado)", () => {
+    expect(
+      restoreAwayRanges(
+        [{ start: at(600), end: at(900) }, { start: at(1200), end: null }],
+        at(3600),
+        awayOpts({ aliveMs: 1_000 }),
+      ),
+    ).toEqual([{ start: at(600), end: at(900) }]);
+  });
+
   it("perdona huecos muy cortos al volver", () => {
     expect(
-      restoreAwayRanges([{ start: at(1200), end: null }], at(1210), { shortAwayMs: 20_000 }),
+      restoreAwayRanges([{ start: at(1200), end: null }], at(1210), awayOpts({ leftPage: true })),
     ).toEqual([]);
   });
 });
