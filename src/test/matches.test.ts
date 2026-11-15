@@ -120,6 +120,15 @@ describe("normalizeMatch", () => {
   });
 });
 
+describe("calendario de reserva", () => {
+  it("tiene el Mirandés hoy a las 16:30", () => {
+    const match = DEFAULT_MATCHES.find((item) => item.id === "mirandes-2026-11-15");
+
+    expect(match?.kickoffAt).toBe("2026-11-15T16:30:00+01:00");
+    expect(match?.date).toBe("15 NOV · 16:30");
+  });
+});
+
 describe("caché local", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -134,7 +143,7 @@ describe("caché local", () => {
   });
 
   it("ignora basura guardada", () => {
-    window.localStorage.setItem("anxo-carro:matches-v1", "{no es json");
+    window.localStorage.setItem("anxo-carro:matches-v4", "{no es json");
     expect(readCachedMatches()).toBeNull();
   });
 });

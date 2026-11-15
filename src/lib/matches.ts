@@ -31,7 +31,7 @@ export type Match = {
 
 export type MatchesState = { past: Match[]; next: Match[] };
 
-const CACHE_KEY = "anxo-carro:matches-v1";
+const CACHE_KEY = "anxo-carro:matches-v4";
 /** Margen tras el kickoff para dar un partido por terminado si no se marcó. */
 const AUTO_PAST_MS = 3 * 60 * 60 * 1000;
 
