@@ -148,10 +148,13 @@ type PersistedState = {
   joinedKickoffAt: number | null;
   joinedMatchTimer: number | null;
   awayRanges: AwayRange[];
-  // Marcas de depuración que se conservan por compatibilidad con sesiones
-  // antiguas. Ya no deciden nada: cualquier hueco abierto cuenta como ausencia.
+  // La página se abandonó de verdad (pagehide: otra web, cerrar pestaña). Al
+  // volver, el hueco abierto cuenta como ausencia.
   leftPageAt?: number | null;
+  // La pantalla estaba bloqueada cuando murió la pestaña: el hueco NO cuenta.
   locked?: boolean;
+  // Tiempo que la página siguió viva desde que empezó la ausencia. Distingue
+  // salir a otra app (sigue latiendo) de apagar la pantalla (se congela).
   awayAliveMs?: number;
   // Identificador de la sesión de modo fan: es la clave con la que la hoja de
   // Google actualiza la fila del socio (una fila por sesión, no por envío).
@@ -213,11 +216,16 @@ const AWAY_BODY = "Has salido de la app y el cronómetro está en pausa. Vuelve 
 // corto puede pasar desapercibido. Los ratos fuera por debajo de este umbral se
 // perdonan, para que encender y apagar la pantalla un instante no reste nada.
 const SHORT_AWAY_MS = 20_000;
-// Mientras está "fuera", la página late cada pocos segundos y guarda cuánto
-// aguantó viva. Es solo informativo (depuración): el hueco cuenta como
-// ausencia aunque el latido se corte al apagar la pantalla.
+// Mientras está "fuera", la página late cada 2 s y guarda cuánto aguantó viva.
+// Es lo que distingue apagar la pantalla desde la app (la pestaña se congela al
+// instante y sigue contando) de salir de la web y luego apagar (la página vivió
+// al menos un latido y ese hueco sí es ausencia).
+const AWAY_ALIVE_THRESHOLD_MS = 2_000;
 const AWAY_HEARTBEAT_MS = 2_000;
 const AWAY_HEARTBEAT_PERSIST_MS = 5_000;
+// Margen para cancelar la ausencia recién cerrada cuando la prueba de bloqueo
+// llega tarde (la pestaña estaba congelada y el evento se entrega al volver).
+const LOCK_CANCEL_WINDOW_MS = 8_000;
 // Cada cuánto se manda el estado del socio a la hoja de Google mientras dura
 // el modo fan. Con 30 s, como mucho se pierden los últimos 30 s si el móvil
 // muere; al salir de la app se manda además un envío inmediato (sendBeacon).
@@ -349,10 +357,11 @@ const clearAwayNotification = async () => {
 // ==========================================
 // PANTALLA BLOQUEADA (Idle Detection, solo Chrome/Chromium)
 // ==========================================
-// Apagar o bloquear la pantalla cuenta como ausencia, igual que salir de la
-// web: si no estás mirando la app, el cronómetro no debe seguir sumando como
-// si estuvieras en modo fan. La Idle Detection API ayuda a detectarlo en
-// Chrome/Android; en el resto, visibilitychange y blur hacen el trabajo.
+// Apagar o bloquear la pantalla con la app delante no debe contar como salir:
+// el modo fan tiene que seguir sumando minutos en la grada. Chrome en Android
+// es el único navegador que permite distinguirlo con la Idle Detection API; en
+// el resto se usa el latido de la página (si se congela al instante, fue un
+// apagado de pantalla).
 type IdleScreenState = "locked" | "unlocked";
 
 type IdleDetectorLike = {
@@ -407,22 +416,29 @@ export default function Index() {
   const awayStartedAtRef = useRef(0);
   const awayNotificationTimerRef = useRef(0);
   const presenceGraceRef = useRef(0);
-  // Marcas guardadas junto a la sesión. Se conservan para depuración y para
-  // cerrar bien la sesión si la pestaña murió, pero ya no decides si el hueco
-  // cuenta: cualquier salida (incluido apagar la pantalla) cuenta como ausencia.
+  // Si la pestaña murió mientras estaba fuera, este marcador de pagehide dice
+  // que el hueco cuenta como ausencia. Al volver se consume, pero el aviso de
+  // bloqueo puede llegar un poco después: durante esa ventana se recuerda que
+  // hubo pagehide para no confundir esa ausencia real con un apagado de
+  // pantalla.
   const leftPageAtRef = useRef<number | null>(null);
+  const leftPageRecentUntilRef = useRef(0);
   const lockedPersistRef = useRef(false);
-  // Latido mientras se está fuera: mide cuánto aguantó viva la página. No
-  // decide nada, solo ayuda a depurar el comportamiento del móvil.
+  // Latido mientras se está fuera: mide si la página siguió viva (pantalla
+  // encendida) o se congeló (pantalla apagada).
   const awayAliveMsRef = useRef(0);
   const lastAwayAliveMsRef = useRef(0);
   const awayHeartbeatRef = useRef(0);
+  // Última ausencia cerrada al volver, con el latido que tenía cuando se
+  // cerró. Un aviso de bloqueo tardío solo puede borrar ESA ausencia (y solo
+  // si la página se congeló), nunca un gris legítimo anterior.
+  const lastClosedAwayRef = useRef<{ end: number; aliveMs: number } | null>(null);
   // Espejo de `awayRanges` para poder persistir en el acto desde un callback.
   const awayRangesRef = useRef<AwayRange[]>([]);
   // Preferencia de avisos del perfil (sirve dentro de callbacks sin dependencias).
   const notifEnabledRef = useRef(true);
-  // Detección de pantalla bloqueada (solo Chrome). Si está bloqueada, el modo
-  // fan se pausa igual que al salir de la web.
+  // Detección de pantalla bloqueada (solo Chrome). Se usa para distinguir un
+  // apagado de pantalla desde la app (sigue contando) de una salida real.
   const screenLockedRef = useRef(false);
   const lockEventsRef = useRef(0);
   // Último estado conocido del detector. Si llega un `change` y ni el usuario
@@ -592,14 +608,22 @@ export default function Index() {
           if (!savedSessionId) persistSessionMeta({ fanSessionId: restoredSessionId });
 
           // Si la pestaña murió estando fuera, el último intervalo queda
-          // abierto y se cierra al volver: apagar la pantalla, cambiar de app o
-          // cerrar la web también cuentan como ausencia.
+          // abierto y hay que decidir qué hacer al volver:
+          // - Si se abandonó la página (pagehide: otra web, cerrar pestaña),
+          //   todo el hueco cuenta como ausencia: se cierra al volver.
+          // - Si la pestaña murió con la pantalla bloqueada desde la app, se
+          //   descarta entero: apagar el móvil con la app delante sigue
+          //   sumando minutos de grada.
           const leftPageAt = typeof saved.leftPageAt === "number" ? saved.leftPageAt : null;
           const wasLocked = saved.locked === true;
+          const aliveMs = typeof saved.awayAliveMs === "number" ? saved.awayAliveMs : 0;
           leftPageAtRef.current = leftPageAt;
           lockedPersistRef.current = wasLocked;
           const savedRanges = Array.isArray(saved.awayRanges) ? saved.awayRanges : [];
           const restored = restoreAwayRanges(savedRanges, Date.now(), {
+            leftPage: leftPageAt !== null,
+            aliveMs,
+            aliveThresholdMs: AWAY_ALIVE_THRESHOLD_MS,
             shortAwayMs: SHORT_AWAY_MS,
           });
           // Los marcadores se consumen al persistir (efecto de estado), no aquí:
@@ -689,8 +713,8 @@ export default function Index() {
     if (awayRef.current) return;
     // Ojo: no se comprueba `screenLockedRef` aquí. Ese flag puede quedarse
     // "pegado" si el evento de bloqueo llega tarde (pestaña congelada) y
-    // entonces se ignorarían todas las salidas. Apagar la pantalla también
-    // cuenta como ausencia: no hay nada que neutralizar.
+    // entonces se ignorarían todas las salidas. El apagado de pantalla se
+    // neutraliza después con la evidencia de bloqueo y el latido de la página.
     // Margen tras entrar: los diálogos de permiso pueden quitar el foco un
     // instante y no queremos que eso cuente como salida.
     if (Date.now() < presenceGraceRef.current) return;
@@ -747,6 +771,7 @@ export default function Index() {
     // Ausencias muy cortas: Chrome puede no llegar a ver el bloqueo (consulta
     // el estado cada ~15 s). No penalizamos esos segundos.
     const tooShort = startedAt > 0 && end - startedAt < SHORT_AWAY_MS;
+    lastClosedAwayRef.current = tooShort ? null : { end, aliveMs: aliveBeforeClose };
     applyAwayRanges((prev) => {
       if (tooShort) {
         const next = prev.filter((r) => r.end !== null);
@@ -758,6 +783,44 @@ export default function Index() {
     if (typeof document !== "undefined") document.title = APP_TITLE;
     setResumeNotice(!tooShort);
   }, [applyAwayRanges, stopAwayHeartbeat]);
+
+  // La pantalla se apagó desde la app: la ausencia que se acaba de abrir o
+  // cerrar era falsa, así que la deshacemos (sin hueco gris y sin aviso). Solo
+  // se toca el último tramo: un gris legítimo anterior no se borra.
+  const cancelAway = useCallback(
+    (windowMs = 8000) => {
+      const nowMs = Date.now();
+      stopAwayHeartbeat();
+      lastAwayAliveMsRef.current = 0;
+      awayAliveMsRef.current = 0;
+      persistSessionMeta({ awayAliveMs: 0 });
+      window.clearTimeout(awayNotificationTimerRef.current);
+      if (awayRef.current) {
+        awayRef.current = false;
+        awayStartedAtRef.current = 0;
+        setIsAway(false);
+      }
+      applyAwayRanges((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last) return prev;
+        // Ausencia aún abierta: era la pantalla apagándose, se borra.
+        if (last.end === null) return prev.slice(0, -1);
+        // Ausencia ya cerrada: solo si es la última que se cerró al volver y
+        // la página se congeló (pantalla apagada). Un gris legítimo anterior
+        // —aunque se cerrara hace un momento— no se toca.
+        const closed = lastClosedAwayRef.current;
+        if (!closed || closed.end !== last.end) return prev;
+        if (nowMs - closed.end > windowMs) return prev;
+        if (closed.aliveMs >= AWAY_ALIVE_THRESHOLD_MS) return prev;
+        return prev.slice(0, -1);
+      });
+      lastClosedAwayRef.current = null;
+      if (typeof document !== "undefined") document.title = APP_TITLE;
+      setResumeNotice(false);
+      void clearAwayNotification();
+    },
+    [applyAwayRanges, stopAwayHeartbeat],
+  );
 
   const handleScreenStateChange = useCallback(() => {
     const detector = idleDetectorRef.current;
@@ -786,15 +849,27 @@ export default function Index() {
     if (lockedPersistRef.current !== lockedNow) {
       lockedPersistRef.current = lockedNow;
       // Se guarda al momento: si el móvil congela la pestaña con la pantalla
-      // apagada y luego la descarta, al reabrir ese hueco cuenta como ausencia.
+      // apagada desde la app y luego la descarta, al reabrir ese hueco NO debe
+      // contar como ausencia (si antes se salió de la web, manda pagehide).
       persistSessionMeta({ locked: lockedNow });
     }
 
+    // Un pagehide es salir de la web de verdad (otra página, cerrar pestaña).
+    // Ese hueco no se borra aunque la pantalla se apague después: es justo el
+    // caso "salgo de la web y luego apago", que debe quedar en pausa.
+    const leftPage =
+      leftPageAtRef.current !== null || Date.now() < leftPageRecentUntilRef.current;
+
     if (lockedNow) {
       lockEventsRef.current += 1;
-      // Pantalla apagada: el modo fan se pausa, igual que al cambiar de app.
-      // Si el visibilitychange ya lo había marcado, markAway no hace nada.
-      markAway();
+      // Si la pantalla se apagó con la app delante, el latido se cortó al
+      // instante: la ausencia era falsa y se deshace (el modo fan sigue).
+      const openAway = awayRef.current;
+      const closed = lastClosedAwayRef.current;
+      const justClosed = closed !== null && Date.now() - closed.end <= LOCK_CANCEL_WINDOW_MS;
+      const aliveMs = openAway ? awayAliveMsRef.current : closed?.aliveMs ?? 0;
+      const frozenByLock = aliveMs < AWAY_ALIVE_THRESHOLD_MS;
+      if (frozenByLock && !leftPage && (openAway || justClosed)) cancelAway(LOCK_CANCEL_WINDOW_MS);
       return;
     }
 
@@ -802,15 +877,19 @@ export default function Index() {
       // El bloqueo puede avisarse tarde: cuando el móvil se queda en el
       // bolsillo, Chrome congela la pestaña y el evento "locked" no llega
       // hasta que se enciende la pantalla. Si ya estamos delante, la ausencia
-      // terminó aquí.
+      // terminó aquí. También se deshace si fue apagar la pantalla desde la app.
       lockEventsRef.current += 1;
+      const closed = lastClosedAwayRef.current;
+      const justClosed = closed !== null && Date.now() - closed.end <= LOCK_CANCEL_WINDOW_MS;
+      const frozenByLock = (closed?.aliveMs ?? 0) < AWAY_ALIVE_THRESHOLD_MS;
+      if (frozenByLock && !leftPage && justClosed) cancelAway(LOCK_CANCEL_WINDOW_MS);
       if (visible) markBack();
       return;
     }
 
     // Pantalla encendida con la app delante: reactivamos el modo fan.
     if (visible) markBack();
-  }, [markAway, markBack]);
+  }, [cancelAway, markBack]);
 
   // Pide permiso y arranca el detector. `fromGesture` es el clic de "Entrar al
   // Modo Fan": el permiso exige un gesto, así que se pide sin más esperas.
@@ -862,8 +941,8 @@ export default function Index() {
         return true;
       } catch {
         // Sin soporte real, permiso denegado o detector ya arrancado: el modo
-        // fan funciona igual; la pantalla apagada se detectará con
-        // visibilitychange/blur cuando el móvil lo permita.
+        // fan funciona igual; el latido de la página distingue un apagado de
+        // pantalla de una salida real.
         const detector = idleDetectorRef.current;
         idleDetectorRef.current = null;
         idleDetectorRunningRef.current = false;
@@ -919,9 +998,12 @@ export default function Index() {
         lockedPersistRef.current = false;
         persistSessionMeta({ locked: false });
       }
-      // El marcador de pagehide se consume al volver (bfcache incluido).
+      // El marcador de pagehide se consume al volver (bfcache incluido), pero
+      // se recuerda durante la ventana de cancelación: un aviso de bloqueo
+      // tardío no debe borrar la ausencia real de "salgo y luego apago".
       if (leftPageAtRef.current !== null) {
         leftPageAtRef.current = null;
+        leftPageRecentUntilRef.current = Date.now() + LOCK_CANCEL_WINDOW_MS;
         persistSessionMeta({ leftPageAt: null });
       }
       markBack();
@@ -1005,10 +1087,12 @@ export default function Index() {
     persistAwayRanges([]);
     awayRef.current = false;
     leftPageAtRef.current = null;
+    leftPageRecentUntilRef.current = 0;
     lockedPersistRef.current = false;
     stopAwayHeartbeat();
     awayAliveMsRef.current = 0;
     lastAwayAliveMsRef.current = 0;
+    lastClosedAwayRef.current = null;
     persistSessionMeta({ leftPageAt: null, locked: false, awayAliveMs: 0 });
     presenceGraceRef.current = Date.now() + 2500;
     setIsAway(false);

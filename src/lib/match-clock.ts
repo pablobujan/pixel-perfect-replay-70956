@@ -171,15 +171,20 @@ export function effectiveDisconnectionSeconds(
  * Reconstruye los tramos de ausencia guardados al recargar/abrir la app.
  *
  * Un tramo abierto significa que la pestaña murió (o se congeló) estando
- * fuera. Ese hueco cuenta como ausencia y se cierra al volver: si el socio
- * apagó la pantalla o cerró la web, el cronómetro no debe seguir sumando como
- * si estuviera en modo fan. Las ausencias muy cortas se perdonan para evitar
- * grises por rozar el móvil.
+ * fuera. Al volver hay que decidir si ese hueco cuenta como ausencia:
+ * - `leftPage`: la página se abandonó de verdad (`pagehide`: otra web, cerrar
+ *   pestaña). El hueco completo es ausencia, así que se cierra al volver.
+ * - `aliveMs`: cuánto tiempo siguió viva la página desde que empezó la
+ *   ausencia. Si aguantó viva (pantalla encendida, otra app delante), la
+ *   salida es real. Si el latido se cortó de inmediato, fue apagado de
+ *   pantalla desde la app y el tramo se descarta: apagar el móvil con la app
+ *   delante sigue contando como modo fan.
+ * - Ausencias muy cortas se perdonan (evita grises por rozar el móvil).
  */
 export function restoreAwayRanges(
   ranges: AwayRange[],
   now: number,
-  opts: { shortAwayMs: number },
+  opts: { leftPage: boolean; aliveMs: number; aliveThresholdMs: number; shortAwayMs: number },
 ): AwayRange[] {
   const closed: AwayRange[] = [];
   const open: AwayRange[] = [];
@@ -192,6 +197,8 @@ export function restoreAwayRanges(
 
   const start = Math.min(...open.map((r) => r.start));
   if (now - start < opts.shortAwayMs) return closed;
+  const definiteExit = opts.leftPage || opts.aliveMs >= opts.aliveThresholdMs;
+  if (!definiteExit) return closed;
   return [...closed, { start, end: now }];
 }
 
