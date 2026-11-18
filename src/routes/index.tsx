@@ -1246,6 +1246,7 @@ export default function Index() {
               awaySegments={awaySegments}
               preFanProgress={preFanProgress}
               matchExtra={matchExtra}
+              extraFirstMinutes={extraFirstMinutes}
               extraSecondMinutes={extraSecondMinutes}
             />
           )}
@@ -1333,7 +1334,7 @@ function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps)
 }
 
 type Tab = "cal" | "mode" | "profile";
-function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraSecondMinutes }: UserProps & { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraSecondMinutes: number }) {
+function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraFirstMinutes, extraSecondMinutes }: UserProps & { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraFirstMinutes: number; extraSecondMinutes: number }) {
   const [tab, setTab] = useState<Tab>("mode");
   const items: { id: Tab; label: string }[] = [{ id: "cal", label: "Calendario" }, { id: "mode", label: "Anxo Carro" }, { id: "profile", label: "Perfil" }];
   
@@ -1360,6 +1361,7 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
             awaySegments={awaySegments}
             preFanProgress={preFanProgress}
             matchExtra={matchExtra}
+            extraFirstMinutes={extraFirstMinutes}
             extraSecondMinutes={extraSecondMinutes}
           />
         )}
@@ -1478,7 +1480,7 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
   );
 }
 
-function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraSecondMinutes }: { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraSecondMinutes: number }) {
+function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraFirstMinutes, extraSecondMinutes }: { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraFirstMinutes: number; extraSecondMinutes: number }) {
   const currentMatch = matchesState.next[0];
 
   // Hora del partido para la cabecera: la que viene en `date` ("21 NOV · 18:45")
@@ -1630,6 +1632,11 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
           <p className={`mt-2 font-display text-3xl ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`}>
             {displayMatchClock}
           </p>
+          {(extraFirstMinutes > 0 || extraSecondMinutes > 0) && (
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Descuento +{extraFirstMinutes}' 1ª{extraSecondMinutes > 0 ? ` · +${extraSecondMinutes}' 2ª` : ""}
+            </p>
+          )}
         </div>
       </div>
 
