@@ -142,6 +142,15 @@ describe("caché local", () => {
     expect(cached?.map((match) => match.id)).toEqual(DEFAULT_MATCHES.map((match) => match.id));
   });
 
+  it("conserva el descuento del árbitro al guardar y releer", () => {
+    const edited = make({ id: "m-int", addedFirst: 2, addedSecond: 4 });
+    writeCachedMatches([edited]);
+
+    const cached = readCachedMatches();
+    expect(cached?.[0]?.addedFirst).toBe(2);
+    expect(cached?.[0]?.addedSecond).toBe(4);
+  });
+
   it("ignora basura guardada", () => {
     window.localStorage.setItem("anxo-carro:matches-v4", "{no es json");
     expect(readCachedMatches()).toBeNull();
