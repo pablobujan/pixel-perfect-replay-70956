@@ -152,7 +152,7 @@ describe("caché local", () => {
   });
 
   it("ignora basura guardada", () => {
-    window.localStorage.setItem("anxo-carro:matches-v4", "{no es json");
+    window.localStorage.setItem("anxo-carro:matches-v5", "{no es json");
     expect(readCachedMatches()).toBeNull();
   });
 });

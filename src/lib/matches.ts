@@ -31,7 +31,7 @@ export type Match = {
 
 export type MatchesState = { past: Match[]; next: Match[] };
 
-const CACHE_KEY = "anxo-carro:matches-v4";
+const CACHE_KEY = "anxo-carro:matches-v5";
 /** Margen tras el kickoff para dar un partido por terminado si no se marcó. */
 const AUTO_PAST_MS = 3 * 60 * 60 * 1000;
 
@@ -78,6 +78,7 @@ export const DEFAULT_MATCHES: Match[] = [
     date: "21 NOV · 18:45",
     home: false,
     played: false,
+    addedFirst: 2,
   },
   {
     id: "ourense-2026-11-29",
