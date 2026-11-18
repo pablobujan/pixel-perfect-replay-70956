@@ -533,6 +533,17 @@ export default function Index() {
     if (state === "granted") void registerNotificationWorker();
   }, []);
 
+  // Al salir del panel hay que tomar ya la copia que acaba de escribir el
+  // guardado. Si se espera al ritmo de sincronización habitual, el reloj sigue
+  // usando la lista antigua (sin descuento) y marca el descanso en 45'.
+  const refreshMatchesAfterAdmin = useCallback(() => {
+    const cached = readCachedMatches();
+    if (cached && cached.length > 0) setMatchList(cached);
+    void loadMatchesFromSheet().then((list) => {
+      if (list && list.length > 0) setMatchList(list);
+    });
+  }, []);
+
   // Calendario remoto: se carga al abrir, al volver a la app y cada 5 minutos.
   // Si la hoja no responde se queda la copia local, sin romper nada.
   useEffect(() => {
@@ -1206,6 +1217,7 @@ export default function Index() {
       // Sin history seguimos: el panel se oculta igual.
     }
     setAdminVisible(false);
+    refreshMatchesAfterAdmin();
   };
 
   if (adminVisible) return <AdminPanel onExit={exitAdmin} />;
