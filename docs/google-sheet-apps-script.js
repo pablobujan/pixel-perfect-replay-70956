@@ -329,8 +329,10 @@ function getMatchesSheet_() {
     }
   }
 
-  // El kickoff se guarda como texto para que Sheets no lo convierta a su antojo.
+  // El kickoff y la etiqueta se guardan como texto para que Sheets no los
+  // convierta en fechas ("01 NOV" se volvía "Sun Nov 01 2026 ...").
   sheet.getRange("C2:C").setNumberFormat("@");
+  sheet.getRange("D2:D").setNumberFormat("@");
   // Descuento en minutos: número entero (vacío = sin descuento).
   sheet.getRange("K2:L").setNumberFormat("0");
   return sheet;
@@ -345,6 +347,7 @@ function seedMatches_(sheet) {
   if (rows.length === 0) return;
 
   sheet.getRange(2, 3, rows.length, 1).setNumberFormat("@");
+  sheet.getRange(2, 4, rows.length, 1).setNumberFormat("@");
   sheet.getRange(2, 1, rows.length, MATCH_HEADERS.length).setValues(rows);
 }
 
@@ -364,11 +367,19 @@ function readMatches_() {
     var id = String(row[0] || "").trim();
     if (!id) continue;
 
+    // Celdas antiguas que Sheets convirtió en fecha: se reparan solas.
+    var etiqueta = String(row[3] || "").trim();
+    if (row[3] instanceof Date) {
+      etiqueta = intendedLabel_(id, row[2]);
+      sheet.getRange(i + 2, 4).setNumberFormat("@");
+      sheet.getRange(i + 2, 4).setValue(etiqueta);
+    }
+
     out.push({
       id: id,
       rival: String(row[1] || "").trim(),
       kickoffAt: iso_(row[2]),
-      date: String(row[3] || "").trim(),
+      date: etiqueta,
       home: bool_(row[4]),
       matchday: Number(row[5]) || 0,
       played: bool_(row[6]),
@@ -390,6 +401,15 @@ function findMatchRow_(sheet, id) {
     if (String(ids[i][0]).trim() === id) return i + 2;
   }
   return 0;
+}
+
+/** Etiqueta que toca: la del calendario inicial o una derivada del kickoff. */
+function intendedLabel_(id, kickoff) {
+  for (var i = 0; i < SEED_MATCHES.length; i += 1) {
+    if (SEED_MATCHES[i].id === id) return SEED_MATCHES[i].date;
+  }
+  var when = safeDate_(kickoff);
+  return when ? Utilities.formatDate(when, TIMEZONE, "dd MMM").toUpperCase() : "";
 }
 
 function buildMatchRow_(match) {
