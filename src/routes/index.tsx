@@ -1558,15 +1558,19 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
     const content = contentRef.current;
     if (!fit || !content) return;
     const apply = () => {
-      // Si no, los hijos flex se encogen para caber y la medida saldría
-      // falseada: los dejamos a su altura natural mientras medimos.
-      content.style.zoom = "1";
-      const children = Array.from(content.children) as HTMLElement[];
-      children.forEach((child) => { child.style.flexShrink = "0"; });
-      const natural = content.getBoundingClientRect().height;
-      children.forEach((child) => { child.style.flexShrink = ""; });
-      const available = fit.clientHeight;
-      content.style.zoom = natural > available ? String(available / natural) : "1";
+      // Medimos a tamaño natural y, si no cabe, escalamos el bloque completo
+      // con transform: scale. Así se conservan las proporciones originales y
+      // el aro absoluto no se descoloca en Safari móvil (zoom sí lo hacía).
+      content.style.transform = "none";
+      fit.style.height = "";
+      const natural = content.offsetHeight;
+      const available = (fit.parentElement as HTMLElement).clientHeight;
+      const scale = natural > available && natural > 0 ? available / natural : 1;
+      if (scale < 1) {
+        content.style.transformOrigin = "top center";
+        content.style.transform = `scale(${scale})`;
+        fit.style.height = `${natural * scale}px`;
+      }
     };
     apply();
     window.addEventListener("resize", apply);
@@ -1645,6 +1649,10 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
   const formattedDisconnectionTime = `${discMins.toString().padStart(2, '0')}:${discSecs.toString().padStart(2, '0')}`;
 
   const R = 120, C = 2 * Math.PI * R;
+  // El aro se pinta en dos tramos contiguos: gris antes de entrar al Modo Fan
+  // y rojo desde ahí hasta ahora. Así el gris nunca tapa al rojo.
+  const preFanArc = C * preFanPct;
+  const fanArc = C * Math.max(0, progressPct - preFanPct);
 
   const timerLabel = !joinedFanMode
     ? "Cronómetro de desconexión"
@@ -1657,8 +1665,8 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
           : "⏱️ Tiempo de desconexión (sin móvil)";
 
   return (
-    <div ref={fitRef} className="flex h-full min-h-0 w-full justify-center">
-      <div ref={contentRef} className="flex w-full flex-col items-center px-5 pb-12 pt-6 text-center">
+    <div ref={fitRef} className="h-full min-h-0 w-full">
+      <div ref={contentRef} className="mx-auto flex w-full flex-col items-center px-5 py-6 text-center">
         <p className={`text-xs font-bold uppercase tracking-widest mb-1 px-2 ${fanLooksActive ? (isAway && !isDuringHalfTime ? "text-stone-500" : "text-primary animate-pulse") : "text-stone-500"}`}>
           {phaseText}
         </p>
@@ -1675,15 +1683,30 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
           <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90">
             <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="14" fill="none" />
 
-            {joinedFanMode && matchTimer >= 0 && (
+            {/* Minutos jugados antes de entrar: gris, desde el inicio. */}
+            {preFanArc > 0 && (
+              <circle
+                cx="140" cy="140" r={R}
+                stroke="#4b5563"
+                strokeWidth="14"
+                fill="none"
+                strokeLinecap="butt"
+                strokeDasharray={`${preFanArc} ${C}`}
+                strokeDashoffset="0"
+                className="transition-all duration-1000 motion-reduce:transition-none"
+              />
+            )}
+
+            {/* Minutos dentro del Modo Fan: rojo, justo después del gris. */}
+            {joinedFanMode && matchTimer >= 0 && fanArc > 0 && (
               <circle
                 cx="140" cy="140" r={R}
                 stroke="var(--primary)"
                 strokeWidth="14"
                 fill="none"
                 strokeLinecap="butt"
-                strokeDasharray={C}
-                strokeDashoffset={C * (1 - progressPct)}
+                strokeDasharray={`${fanArc} ${C}`}
+                strokeDashoffset={-preFanArc}
                 className="transition-all duration-1000 motion-reduce:transition-none"
               />
             )}
@@ -1704,16 +1727,6 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
                 />
               ))}
 
-            <circle
-              cx="140" cy="140" r={R}
-              stroke="#4b5563"
-              strokeWidth="14"
-              fill="none"
-              strokeLinecap="butt"
-              strokeDasharray={C}
-              strokeDashoffset={C * (1 - preFanPct)}
-              className="transition-all duration-1000 motion-reduce:transition-none"
-            />
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center">
