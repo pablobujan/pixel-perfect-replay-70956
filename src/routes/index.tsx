@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type * as React from "react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 import {
@@ -113,17 +113,18 @@ function TeamCrest({ name, className = "w-8 h-8" }: { name: string; className?: 
 }
 
 function Ball({ className = "", color = "var(--primary)" }: { className?: string; color?: string }) {
-  const id = useId().replace(/:/g, "");
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <defs>
-        <clipPath id={`ball${id}`}><circle cx="12" cy="12" r="10.5" /></clipPath>
-      </defs>
       <circle cx="12" cy="12" r="10.5" fill="var(--card)" />
-      <g clipPath={`url(#ball${id})`} stroke={color} strokeWidth=".65" strokeLinejoin="round">
-        <path d="M12 7 L16.76 10.46 L14.94 16.05 H9.06 L7.24 10.46 Z" fill={color} />
-        <path d="M9 0 H15 L15.5 3.4 L12 5 L8.5 3.4 Z M0 6 L3.2 5.8 L5.4 9 L3.5 12 L0 11 Z M24 6 L20.8 5.8 L18.6 9 L20.5 12 L24 11 Z M2 21 L4.5 16.8 L8 17.2 L9 20.8 L6 24 Z M22 21 L19.5 16.8 L16 17.2 L15 20.8 L18 24 Z" fill={color} />
-        <path d="M12 7 V5 M7.24 10.46 L5.4 9 M16.76 10.46 L18.6 9 M9.06 16.05 L8 17.2 M14.94 16.05 L16 17.2 M8.5 3.4 L3.2 5.8 M15.5 3.4 L20.8 5.8 M3.5 12 L4.5 16.8 L20.5 12 L19.5 16.8 M9 20.8 H15" fill="none" />
+      {/* Cada trazo une dos paneles: no quedan líneas sueltas. */}
+      <g stroke={color} strokeWidth=".7" strokeLinejoin="round">
+        <g fill="none">
+          <path d="M12 7.8 L12 4.4 M15.99 10.7 L19.23 9.65 M14.47 15.4 L16.47 18.15 M9.53 15.4 L7.53 18.15 M8.01 10.7 L4.77 9.65" />
+        </g>
+        <g fill={color}>
+          <path d="M12 7.8 L15.99 10.7 L14.47 15.4 L9.53 15.4 L8.01 10.7 Z" />
+          <path d="M12 7.1 L9.43 5.23 L10.41 2.22 L13.59 2.22 L14.57 5.23 Z M16.66 10.48 L17.64 7.47 L20.82 7.47 L21.8 10.48 L19.23 12.35 Z M14.88 15.97 L18.06 15.97 L19.04 18.98 L16.47 20.85 L13.9 18.98 Z M9.12 15.97 L10.1 18.98 L7.53 20.85 L4.96 18.98 L5.94 15.97 Z M7.34 10.48 L4.77 12.35 L2.2 10.48 L3.18 7.47 L6.36 7.47 Z" />
+        </g>
       </g>
       <circle cx="12" cy="12" r="10.5" fill="none" stroke={color} strokeWidth="1" />
     </svg>
