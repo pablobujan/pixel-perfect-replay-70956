@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type * as React from "react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 import {
@@ -62,6 +62,10 @@ export const Route = createFileRoute("/")({
 // Las imágenes se sirven con una versión en la URL para que el móvil no se
 // quede con la copia antigua en caché tras normalizar los escudos.
 const crestSrc = (file: string) => `${file}?v=3`;
+
+// En el servidor no hay layout: el prerenderizado usa useEffect y el navegador
+// mide antes de pintar para que no se vea el salto de escala.
+const useFitLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function CrestImage({ className = "w-16 h-16" }: { className?: string }) {
   return (
@@ -1368,8 +1372,8 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
   
   return (
     <>
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-2">
-        <CrestImage className="w-9 h-9" /><span className="font-display text-xl tracking-wide">CD Lugo</span>
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3">
+        <CrestImage className="w-8 h-8" /><span className="font-display text-xl tracking-wide">CD Lugo</span>
       </header>
       <main key={tab} className="animate-screen-in min-h-0 flex-1 overflow-y-auto">
         {tab === "cal" && <CalendarView matchesState={matchesState} />}
@@ -1402,21 +1406,21 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
         )}
 
       </main>
-      <nav className="shrink-0 w-full border-t border-border bg-card px-6 pb-2 pt-1">
+      <nav className="shrink-0 w-full border-t border-border bg-card px-6 pb-4 pt-2">
         <div className="flex items-end justify-between">
           {items.map((it) => {
             const active = tab === it.id;
             if (it.id === "mode")
               return (
-                <button key={it.id} onClick={() => setTab("mode")} className="-mt-6 flex flex-col items-center gap-0.5">
-                  <span className={`flex h-14 w-14 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-8 w-8" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
-                  <span className={`text-[11px] leading-tight ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
+                <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
+                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
+                  <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
                 </button>
               );
             const Icon = it.id === "cal" ? Calendar : User;
             return (
-              <button key={it.id} onClick={() => setTab(it.id)} className={`flex w-20 flex-col items-center gap-0.5 py-1 ${active ? "text-primary" : "text-muted-foreground"}`}>
-                <Icon className="h-5 w-5" /><span className="text-[11px] leading-tight">{it.label}</span>
+              <button key={it.id} onClick={() => setTab(it.id)} className={`flex w-20 flex-col items-center gap-1 py-2 ${active ? "text-primary" : "text-muted-foreground"}`}>
+                <Icon className="h-6 w-6" /><span className="text-xs">{it.label}</span>
               </button>
             );
           })}
@@ -1427,12 +1431,12 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
 }
 
 function CalendarView({ matchesState }: { matchesState: MatchesState }) {
-  const [showAll, setShowAll] = useState(false);
+  const [showAllPast, setShowAllPast] = useState(false);
+  const [showAllNext, setShowAllNext] = useState(false);
   const currentNext = matchesState.next[0];
   const followingNext = matchesState.next.slice(1);
-  const visibleFollowing = showAll ? followingNext : followingNext.slice(0, 5);
-  const visiblePast = showAll ? matchesState.past : matchesState.past.slice(0, 5);
-  const hasMore = followingNext.length > 5 || matchesState.past.length > 5;
+  const visibleFollowing = showAllNext ? followingNext : followingNext.slice(0, 5);
+  const visiblePast = showAllPast ? matchesState.past : matchesState.past.slice(0, 5);
 
   return (
     <div className="px-5 py-6">
@@ -1491,6 +1495,16 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
         })}
       </ul>
 
+      {matchesState.past.length > 5 && (
+        <button
+          type="button"
+          onClick={() => setShowAllPast((value) => !value)}
+          className="mt-3 w-full rounded-2xl border border-border bg-card py-3 text-sm font-semibold text-primary transition active:scale-95"
+        >
+          {showAllPast ? "Mostrar menos" : "Mostrar más"}
+        </button>
+      )}
+
       {visibleFollowing.length > 0 && (
         <>
           <h3 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Siguientes jornadas</h3>
@@ -1514,17 +1528,17 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
               );
             })}
           </ul>
-        </>
-      )}
 
-      {hasMore && (
-        <button
-          type="button"
-          onClick={() => setShowAll((value) => !value)}
-          className="mt-5 w-full rounded-2xl border border-border bg-card py-3 text-sm font-semibold text-primary transition active:scale-95"
-        >
-          {showAll ? "Mostrar menos" : "Mostrar más"}
-        </button>
+          {followingNext.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowAllNext((value) => !value)}
+              className="mt-3 w-full rounded-2xl border border-border bg-card py-3 text-sm font-semibold text-primary transition active:scale-95"
+            >
+              {showAllNext ? "Mostrar menos" : "Mostrar más"}
+            </button>
+          )}
+        </>
       )}
     </div>
   );
@@ -1532,6 +1546,32 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
 
 function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disconnectionSeconds, isAway, resumeNotice, notificationState, onEnableNotifications, lockGuard, onEnableLockGuard, awaySegments, preFanProgress, matchExtra, extraSecondMinutes }: { matchesState: MatchesState; matchTimer: number; joinedFanMode: boolean; onJoinFanMode: () => void; disconnectionSeconds: number; isAway: boolean; resumeNotice: boolean; notificationState: NotificationState; onEnableNotifications: () => Promise<boolean>; lockGuard: "unknown" | "on" | "off"; onEnableLockGuard: () => void; awaySegments: ProgressRange[]; preFanProgress: number | null; matchExtra: MatchExtra; extraSecondMinutes: number }) {
   const currentMatch = matchesState.next[0];
+
+  // La pantalla mantiene el diseño original: mismo cronómetro, mismo aro y
+  // misma barra inferior. Solo se escala de forma uniforme para que quepa entera
+  // en el móvil sin tener que deslizar.
+  const fitRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useFitLayoutEffect(() => {
+    const fit = fitRef.current;
+    const content = contentRef.current;
+    if (!fit || !content) return;
+    const apply = () => {
+      // Si no, los hijos flex se encogen para caber y la medida saldría
+      // falseada: los dejamos a su altura natural mientras medimos.
+      content.style.zoom = "1";
+      const children = Array.from(content.children) as HTMLElement[];
+      children.forEach((child) => { child.style.flexShrink = "0"; });
+      const natural = content.getBoundingClientRect().height;
+      children.forEach((child) => { child.style.flexShrink = ""; });
+      const available = fit.clientHeight;
+      content.style.zoom = natural > available ? String(available / natural) : "1";
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  });
 
   // Hora del partido para la cabecera: la que viene en `date` ("21 NOV · 18:45")
   // o, si no la hay, la que se deduce del kickoff.
@@ -1617,135 +1657,133 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
           : "⏱️ Tiempo de desconexión (sin móvil)";
 
   return (
-    <div className="flex h-full min-h-0 flex-col items-center px-4 pb-1 pt-1 text-center">
-      <p className={`mb-0.5 px-1 text-[10px] font-bold uppercase leading-tight tracking-widest ${fanLooksActive ? (isAway && !isDuringHalfTime ? "text-stone-500" : "text-primary animate-pulse") : "text-stone-500"}`}>
-        {phaseText}
-      </p>
-
-      {resumeNotice && joinedFanMode && !isAway && (
-        <p className="animate-screen-in mb-0.5 rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary-foreground">
-          ▶ Modo Fan reactivado
+    <div ref={fitRef} className="flex h-full min-h-0 w-full justify-center">
+      <div ref={contentRef} className="flex w-full flex-col items-center px-5 pb-12 pt-6 text-center">
+        <p className={`text-xs font-bold uppercase tracking-widest mb-1 px-2 ${fanLooksActive ? (isAway && !isDuringHalfTime ? "text-stone-500" : "text-primary animate-pulse") : "text-stone-500"}`}>
+          {phaseText}
         </p>
-      )}
 
-      <h2 className="font-display text-[clamp(24px,6dvh,34px)] leading-none tracking-wide">Modo Anxo Carro</h2>
+        {resumeNotice && joinedFanMode && !isAway && (
+          <p className="animate-screen-in mb-1 rounded-full bg-primary px-4 py-1 text-xs font-bold uppercase tracking-widest text-primary-foreground">
+            ▶ Modo Fan reactivado
+          </p>
+        )}
 
-      {/* El aro crece con la pantalla pero nunca la desborda: la pantalla del
-          modo fan cabe entera y la barra inferior queda siempre a la vista. */}
-      <div className="relative my-auto aspect-square w-[min(280px,35dvh,82vw)] shrink-0">
-        <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90">
-          <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="14" fill="none" />
+        <h2 className="font-display text-4xl tracking-wide">Modo Anxo Carro</h2>
 
-          {joinedFanMode && matchTimer >= 0 && (
+        <div className="relative mt-6 h-[280px] w-[280px]">
+          <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90">
+            <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="14" fill="none" />
+
+            {joinedFanMode && matchTimer >= 0 && (
+              <circle
+                cx="140" cy="140" r={R}
+                stroke="var(--primary)"
+                strokeWidth="14"
+                fill="none"
+                strokeLinecap="butt"
+                strokeDasharray={C}
+                strokeDashoffset={C * (1 - progressPct)}
+                className="transition-all duration-1000 motion-reduce:transition-none"
+              />
+            )}
+
+            {/* Ratos fuera de la app: cortan el rojo con un tramo gris. */}
+            {joinedFanMode &&
+              awaySegments.map((segment, index) => (
+                <circle
+                  key={`away-${index}`}
+                  cx="140" cy="140" r={R}
+                  stroke="#4b5563"
+                  strokeWidth="14"
+                  fill="none"
+                  strokeLinecap="butt"
+                  strokeDasharray={`${C * (segment.end - segment.start)} ${C}`}
+                  strokeDashoffset={-C * segment.start}
+                  className="transition-all duration-1000 motion-reduce:transition-none"
+                />
+              ))}
+
             <circle
               cx="140" cy="140" r={R}
-              stroke="var(--primary)"
+              stroke="#4b5563"
               strokeWidth="14"
               fill="none"
               strokeLinecap="butt"
               strokeDasharray={C}
-              strokeDashoffset={C * (1 - progressPct)}
+              strokeDashoffset={C * (1 - preFanPct)}
               className="transition-all duration-1000 motion-reduce:transition-none"
             />
-          )}
+          </svg>
 
-          {/* Ratos fuera de la app: cortan el rojo con un tramo gris. */}
-          {joinedFanMode &&
-            awaySegments.map((segment, index) => (
-              <circle
-                key={`away-${index}`}
-                cx="140" cy="140" r={R}
-                stroke="#4b5563"
-                strokeWidth="14"
-                fill="none"
-                strokeLinecap="butt"
-                strokeDasharray={`${C * (segment.end - segment.start)} ${C}`}
-                strokeDashoffset={-C * segment.start}
-                className="transition-all duration-1000 motion-reduce:transition-none"
-              />
-            ))}
-
-          <circle
-            cx="140" cy="140" r={R}
-            stroke="#4b5563"
-            strokeWidth="14"
-            fill="none"
-            strokeLinecap="butt"
-            strokeDasharray={C}
-            strokeDashoffset={C * (1 - preFanPct)}
-            className="transition-all duration-1000 motion-reduce:transition-none"
-          />
-        </svg>
-
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="relative flex aspect-square w-[min(160px,21dvh,46vw)] items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
-            <Ball className="h-[72%] w-[72%]" />
-          </div>
-          <p className={`mt-1 font-display text-[clamp(20px,5dvh,30px)] leading-none ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`}>
-            {displayMatchClock}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-1 w-full shrink-0 rounded-3xl bg-card px-4 py-2.5">
-        <p className="text-[10px] uppercase leading-tight tracking-widest text-muted-foreground">
-          {timerLabel}
-        </p>
-        <div className="flex items-baseline justify-between gap-2">
-          <p className={`font-display text-[clamp(30px,7dvh,44px)] leading-none tracking-wider ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`} role="timer" aria-label="Cronómetro de desconexión">
-            {joinedFanMode ? formattedDisconnectionTime : "00:00"}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {currentMatch ? `CD Lugo vs ${currentMatch.rival}` : "Jornada completada"}
-          </p>
-        </div>
-
-        {joinedFanMode && lockGuard === "off" && (
-          <button
-            type="button"
-            onClick={onEnableLockGuard}
-            className="mt-1.5 w-full rounded-lg border border-primary/40 px-2 py-1 text-[10px] font-semibold text-primary"
-          >
-            📴 Mejorar la detección al apagar la pantalla
-          </button>
-        )}
-
-        {joinedFanMode && notificationState !== "granted" && notificationState !== "unknown" && (
-          notificationState === "default" ? (
-            <button
-              type="button"
-              onClick={onEnableNotifications}
-              className="mt-1.5 w-full rounded-lg border border-primary/40 px-2 py-1 text-[10px] font-semibold text-primary"
-            >
-              🔔 Activar aviso al salir de la app
-            </button>
-          ) : (
-            <p className="mt-1.5 text-[10px] text-muted-foreground">
-              {notificationState === "insecure"
-                ? "🔒 Abre la app por HTTPS para recibir avisos en el móvil"
-                : notificationState === "denied"
-                  ? "🔕 Notificaciones bloqueadas en el navegador"
-                  : "🔕 Este navegador no admite avisos"}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
+              <Ball className="h-24 w-24" />
+            </div>
+            <p className={`mt-2 font-display text-3xl ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`}>
+              {displayMatchClock}
             </p>
-          )
-        )}
+          </div>
+        </div>
 
-        <button
-          type="button"
-          onClick={onJoinFanMode}
-          disabled={joinedFanMode}
-          className="mt-2 w-full rounded-xl bg-primary py-2 font-display text-xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40"
-        >
-          {joinedFanMode
-            ? isAway
-              ? "⏸️ Modo Fan en pausa"
-              : matchTimer < 0
-                ? "Próximamente 🏟️"
-                : isDuringHalfTime
-                  ? "⏸️ En Descanso"
-                  : "¡Modo Fan Activo! 🏟️"
-            : "Entrar al Modo Fan"}
-        </button>
+        <div className="mt-6 w-full rounded-3xl bg-card p-5 flex flex-col gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              {timerLabel}
+            </p>
+            <p className={`font-display text-5xl tracking-wider ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`} role="timer" aria-label="Cronómetro de desconexión">
+              {joinedFanMode ? formattedDisconnectionTime : "00:00"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {currentMatch ? `CD Lugo vs ${currentMatch.rival}` : "Jornada completada"}
+            </p>
+
+            {joinedFanMode && lockGuard === "off" && (
+              <button
+                type="button"
+                onClick={onEnableLockGuard}
+                className="mt-3 w-full rounded-xl border border-primary/50 px-3 py-2 text-xs font-semibold text-primary"
+              >
+                📴 Mejorar la detección al apagar la pantalla
+              </button>
+            )}
+
+            {joinedFanMode && notificationState !== "granted" && notificationState !== "unknown" && (
+              notificationState === "default" ? (
+                <button
+                  type="button"
+                  onClick={onEnableNotifications}
+                  className="mt-3 w-full rounded-xl border border-primary/50 px-3 py-2 text-xs font-semibold text-primary"
+                >
+                  🔔 Activar aviso al salir de la app
+                </button>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {notificationState === "insecure"
+                    ? "🔒 Abre la app por HTTPS para recibir avisos en el móvil"
+                    : notificationState === "denied"
+                      ? "🔕 Notificaciones bloqueadas en el navegador"
+                      : "🔕 Este navegador no admite avisos"}
+                </p>
+              )
+            )}
+          </div>
+
+          <Btn
+            onClick={onJoinFanMode}
+            disabled={joinedFanMode}
+          >
+            {joinedFanMode
+              ? isAway
+                ? "⏸️ Modo Fan en pausa"
+                : matchTimer < 0
+                  ? "Próximamente 🏟️"
+                  : isDuringHalfTime
+                    ? "⏸️ En Descanso"
+                    : "¡Modo Fan Activo! 🏟️"
+              : "Entrar al Modo Fan"}
+          </Btn>
+        </div>
       </div>
     </div>
   );
