@@ -240,11 +240,10 @@ const parseKickoff = (iso?: string): number | null => {
 };
 
 // ==========================================
-// AVISO AL SALIR DE LA APP
+// TÍTULO AL SALIR DE LA APP
 // ==========================================
 const APP_TITLE = "Modo Anxo Carro · CD Lugo";
 const AWAY_TITLE = "¡Vuelve al Modo Anxo Carro!";
-const AWAY_BODY = "Has salido de la app y el cronómetro está en pausa. Vuelve al partido para reactivar el Modo Fan.";
 
 // Chromium consulta el bloqueo de pantalla en sondeos de ~15 s: un apagado muy
 // corto puede pasar desapercibido. Los ratos fuera por debajo de este umbral se
@@ -309,42 +308,6 @@ const requestNotificationPermission = async (): Promise<boolean> => {
   }
 };
 
-/** Notificación del sistema. Si el navegador no deja, no rompe nada. */
-const showAwayNotification = async () => {
-  if (typeof window === "undefined" || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  const options: NotificationOptions = {
-    body: AWAY_BODY,
-    icon: "/lugo.png",
-    badge: "/lugo.png",
-    tag: "anxo-carro-away",
-  };
-
-  try {
-    const registration = await registerNotificationWorker();
-    if (registration) {
-      // Mejor por mensaje al service worker: el navegador puede congelar la
-      // pestaña justo al salir, pero el SW sigue vivo para mostrar el aviso.
-      const target = registration.active ?? navigator.serviceWorker.controller;
-      if (target) {
-        target.postMessage({ type: "show-away-notification", title: AWAY_TITLE, body: AWAY_BODY });
-        return;
-      }
-      await registration.showNotification(AWAY_TITLE, options);
-      return;
-    }
-  } catch {
-    // Sin service worker (o sin soporte): probamos la notificación normal.
-  }
-
-  try {
-    new Notification(AWAY_TITLE, options);
-  } catch {
-    // Notificaciones no disponibles: el título de la pestaña ya avisa.
-  }
-};
-
 /** Manda un mensaje al service worker (el que muestra/cierra el aviso). */
 const postToNotificationWorker = async (message: unknown): Promise<boolean> => {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return false;
@@ -359,19 +322,6 @@ const postToNotificationWorker = async (message: unknown): Promise<boolean> => {
     return false;
   }
 };
-
-// Espera antes de avisar: si el móvil solo estaba apagando la pantalla, el
-// aviso se cancela y el bolsillo no vibra.
-const AWAY_NOTIFICATION_DELAY_MS = 2500;
-
-/** Programa el aviso de "has salido" (con retardo) en el service worker. */
-const scheduleAwayNotification = () =>
-  postToNotificationWorker({
-    type: "schedule-away-notification",
-    delayMs: AWAY_NOTIFICATION_DELAY_MS,
-    title: AWAY_TITLE,
-    body: AWAY_BODY,
-  });
 
 /** Cancela el aviso programado y cierra el que ya estuviera visible. */
 const clearAwayNotification = async () => {
@@ -447,7 +397,6 @@ export default function Index() {
   const [resumeNotice, setResumeNotice] = useState(false);
   const awayRef = useRef(false);
   const awayStartedAtRef = useRef(0);
-  const awayNotificationTimerRef = useRef(0);
   const presenceGraceRef = useRef(0);
   // Si la pestaña murió mientras estaba fuera, este marcador de pagehide dice
   // que el hueco cuenta como ausencia. Al volver se consume, pero el aviso de
@@ -468,8 +417,6 @@ export default function Index() {
   const lastClosedAwayRef = useRef<{ end: number; aliveMs: number } | null>(null);
   // Espejo de `awayRanges` para poder persistir en el acto desde un callback.
   const awayRangesRef = useRef<AwayRange[]>([]);
-  // Preferencia de avisos del perfil (sirve dentro de callbacks sin dependencias).
-  const notifEnabledRef = useRef(true);
   // Detección de pantalla bloqueada (solo Chrome). Se usa para distinguir un
   // apagado de pantalla desde la app (sigue contando) de una salida real.
   const screenLockedRef = useRef(false);
@@ -613,11 +560,6 @@ export default function Index() {
       window.clearTimeout(timer);
     };
   }, []);
-
-  // Preferencia de avisos del perfil, accesible desde `markAway`.
-  useEffect(() => {
-    notifEnabledRef.current = user.notif !== false;
-  }, [user.notif]);
 
   // ?debug=1 muestra el estado interno del escudo de pantalla apagada.
   useEffect(() => {
@@ -782,24 +724,11 @@ export default function Index() {
       prev.some((r) => r.end === null) ? prev : [...prev, { start: startedAt, end: null }],
     );
     startAwayHeartbeat();
+    // Solo cambiamos el título de la pestaña. No se manda notificación: al
+    // apagar la pantalla dentro del Modo Fan la salida se cancela en cuanto se
+    // confirma el bloqueo, y el aviso del service worker podía llegar tarde o
+    // vibrar en el bolsillo aunque el socio no hubiera salido.
     if (typeof document !== "undefined") document.title = AWAY_TITLE;
-    // El aviso se programa en el service worker: al ocultarse, el navegador
-    // puede congelar la pestaña y el temporizador de aquí no llegaría a
-    // mostrar nada. Si no hay service worker, se usa el temporizador normal.
-    window.clearTimeout(awayNotificationTimerRef.current);
-    if (
-      notifEnabledRef.current &&
-      typeof Notification !== "undefined" &&
-      Notification.permission === "granted"
-    ) {
-      void scheduleAwayNotification().then((ok) => {
-        if (ok) return;
-        awayNotificationTimerRef.current = window.setTimeout(
-          () => void showAwayNotification(),
-          AWAY_NOTIFICATION_DELAY_MS,
-        );
-      });
-    }
   }, [applyAwayRanges, startAwayHeartbeat]);
 
   const markBack = useCallback(() => {
@@ -816,8 +745,7 @@ export default function Index() {
     lastAwayAliveMsRef.current = aliveBeforeClose;
     awayAliveMsRef.current = 0;
     persistSessionMeta({ awayAliveMs: 0 });
-    window.clearTimeout(awayNotificationTimerRef.current);
-    // Si el aviso estaba programado (o ya visible), se retira al volver.
+    // Cerramos cualquier aviso que quedara de una versión anterior.
     void clearAwayNotification();
     awayRef.current = false;
     const startedAt = awayStartedAtRef.current;
@@ -850,7 +778,6 @@ export default function Index() {
       lastAwayAliveMsRef.current = 0;
       awayAliveMsRef.current = 0;
       persistSessionMeta({ awayAliveMs: 0 });
-      window.clearTimeout(awayNotificationTimerRef.current);
       if (awayRef.current) {
         awayRef.current = false;
         awayStartedAtRef.current = 0;
