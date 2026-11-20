@@ -1277,8 +1277,11 @@ function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps)
   return (
     <form onSubmit={(e) => { e.preventDefault(); onNext(); }} className="flex flex-1 flex-col px-6 py-10">
       <div className="flex items-center gap-3"><CrestImage className="w-10 h-10" /><span className="font-display text-2xl tracking-wide">CD Lugo</span></div>
-      <h2 className="mt-10 font-display text-5xl tracking-wide">Identifícate</h2>
-      <p className="mb-8 text-muted-foreground">Acceso rápido para socios.</p>
+      <h2 className="mt-8 font-display text-5xl tracking-wide">Identifícate</h2>
+      <p className="mb-4 text-muted-foreground">Acceso rápido para socios.</p>
+      <p className="mb-6 rounded-2xl bg-card px-4 py-3 text-sm leading-snug text-muted-foreground">
+        La app detecta que apagas la pantalla: entra en el Modo Fan, apaga el móvil y sigue sumando minutos.
+      </p>
       <div className="flex flex-col gap-4">
         <Field icon={User} placeholder="Nombre completo" {...bind("name")} />
         <Field icon={Mail} type="email" placeholder="Correo electrónico" {...bind("email")} />
