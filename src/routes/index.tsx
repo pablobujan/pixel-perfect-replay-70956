@@ -72,24 +72,43 @@ function CrestImage({ className = "w-16 h-16" }: { className?: string }) {
   );
 }
 
-function TeamCrest({ name, className = "w-8 h-8" }: { name: string; className?: string }) {
-  const crests: Record<string, string> = {
-    "CD Lugo": "/lugo.png",
-    "CP Cacereño": "/cacereno.png",
-    "Cacereño": "/cacereno.png",
-    "cacereño": "/cacereno.png",
-    "AD Mérida": "/merida.png",
-    "Mérida": "/merida.png",
-    "Merida": "/merida.png",
-    "Mirandés": "/mirandes.png",
-    "Mirandes": "/mirandes.png",
-    "Pontevedra": "/pontevedra.png",
-    "pontevedra": "/pontevedra.png",
-    "UD Ourense": "/ourense.png",
-    "Ourense": "/ourense.png",
-  };
+const CRESTS: Record<string, string> = {
+  "CD Lugo": "/lugo.png",
+  "Lugo": "/lugo.png",
+  "CP Cacereño": "/cacereno.png",
+  "Cacereño": "/cacereno.png",
+  "AD Mérida": "/merida.png",
+  "Mérida": "/merida.png",
+  "Mirandés": "/mirandes.png",
+  "Pontevedra": "/pontevedra.png",
+  "UD Ourense": "/ourense.png",
+  "Unionistas CF": "/unionistas.png",
+  "Ponferradina": "/ponferradina.png",
+  "Zamora CF": "/zamora.png",
+  "Racing Ferrol": "/ferrol.png",
+  "Real Avilés": "/aviles.png",
+  "UD Logroñés": "/logrones.png",
+  "Depor Fabril": "/depor.png",
+  "Arenas Club": "/arenas.png",
+  "CyD Leonesa": "/leonesa.png",
+  "Barakaldo CF": "/barakaldo.png",
+  "Athletic B": "/athletic-b.png",
+  "CD Extremadura": "/extremadura.png",
+};
 
-  const imageSrc = crests[name] || crests[name.trim()];
+/** Quita acentos, mayúsculas y espacios para encontrar el escudo aunque el
+ *  nombre venga de la hoja con otra forma (p. ej. "Aviles" o "Cacereno"). */
+const normalizeCrestName = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+const CRESTS_BY_KEY = new Map(Object.entries(CRESTS).map(([key, src]) => [normalizeCrestName(key), src]));
+
+function TeamCrest({ name, className = "w-8 h-8" }: { name: string; className?: string }) {
+  const imageSrc = CRESTS[name] ?? CRESTS_BY_KEY.get(normalizeCrestName(name));
 
   if (!imageSrc) {
     const initial = name.substring(0, 3).toUpperCase();
