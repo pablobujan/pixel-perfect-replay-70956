@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type * as React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Calendar, User, ChevronRight, Mail, Phone, IdCard, Home, Plane, Bell } from "lucide-react";
 
 import {
@@ -59,10 +59,14 @@ export const Route = createFileRoute("/")({
 // COMPONENTES VISUALES AUXILIARES
 // ==========================================
 
+// Las imágenes se sirven con una versión en la URL para que el móvil no se
+// quede con la copia antigua en caché tras normalizar los escudos.
+const crestSrc = (file: string) => `${file}?v=3`;
+
 function CrestImage({ className = "w-16 h-16" }: { className?: string }) {
   return (
     <img 
-      src="/lugo.png" 
+      src={crestSrc("/lugo.png")} 
       alt="Escudo CD Lugo" 
       className={`object-contain ${className}`}
       onError={(e) => {
@@ -121,7 +125,7 @@ function TeamCrest({ name, className = "w-8 h-8" }: { name: string; className?: 
 
   return (
     <img 
-      src={imageSrc} 
+      src={crestSrc(imageSrc)} 
       alt={`Escudo ${name}`} 
       className={`object-contain ${className}`}
       onError={(e) => {
@@ -132,17 +136,22 @@ function TeamCrest({ name, className = "w-8 h-8" }: { name: string; className?: 
 }
 
 function Ball({ className = "", color = "var(--primary)" }: { className?: string; color?: string }) {
+  const clipId = `balon-${useId().replace(/:/g, "")}`;
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}><circle cx="12" cy="12" r="10.5" /></clipPath>
+      </defs>
       <circle cx="12" cy="12" r="10.5" fill="var(--card)" />
-      {/* Cada trazo une dos paneles: no quedan líneas sueltas. */}
-      <g stroke={color} strokeWidth=".7" strokeLinejoin="round">
+      <g clipPath={`url(#${clipId})`} stroke={color} strokeWidth=".65" strokeLinejoin="round">
+        {/* Pentágono central y cinco paneles: el balón clásico de siempre. */}
+        <path d="M12 7 L16.76 10.46 L14.94 16.05 H9.06 L7.24 10.46 Z" fill={color} />
+        <path d="M9 0 H15 L15.5 3.4 L12 5 L8.5 3.4 Z M0 6 L3.2 5.8 L5.4 9 L3.5 12 L0 11 Z M24 6 L20.8 5.8 L18.6 9 L20.5 12 L24 11 Z M2 21 L4.5 16.8 L8 17.2 L9 20.8 L6 24 Z M22 21 L19.5 16.8 L16 17.2 L15 20.8 L18 24 Z" fill={color} />
+        {/* Cada unión sale de un vértice y llega al panel vecino: ninguna línea
+            atraviesa el balón ni queda suelta. */}
         <g fill="none">
-          <path d="M12 7.8 L12 4.4 M15.99 10.7 L19.23 9.65 M14.47 15.4 L16.47 18.15 M9.53 15.4 L7.53 18.15 M8.01 10.7 L4.77 9.65" />
-        </g>
-        <g fill={color}>
-          <path d="M12 7.8 L15.99 10.7 L14.47 15.4 L9.53 15.4 L8.01 10.7 Z" />
-          <path d="M12 7.1 L9.43 5.23 L10.41 2.22 L13.59 2.22 L14.57 5.23 Z M16.66 10.48 L17.64 7.47 L20.82 7.47 L21.8 10.48 L19.23 12.35 Z M14.88 15.97 L18.06 15.97 L19.04 18.98 L16.47 20.85 L13.9 18.98 Z M9.12 15.97 L10.1 18.98 L7.53 20.85 L4.96 18.98 L5.94 15.97 Z M7.34 10.48 L4.77 12.35 L2.2 10.48 L3.18 7.47 L6.36 7.47 Z" />
+          <path d="M12 7 V5 M16.76 10.46 L18.6 9 M14.94 16.05 L16 17.2 M9.06 16.05 L8 17.2 M7.24 10.46 L5.4 9" />
+          <path d="M8.5 3.4 L3.2 5.8 M15.5 3.4 L20.8 5.8 M3.5 12 L4.5 16.8 M20.5 12 L19.5 16.8 M9 20.8 H15" />
         </g>
       </g>
       <circle cx="12" cy="12" r="10.5" fill="none" stroke={color} strokeWidth="1" />
@@ -150,8 +159,8 @@ function Ball({ className = "", color = "var(--primary)" }: { className?: string
   );
 }
 
-function Btn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button {...props} className="w-full rounded-2xl bg-primary py-4 font-display text-2xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40" />;
+function Btn({ className = "", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button {...props} className={`w-full rounded-2xl bg-primary py-4 font-display text-2xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40 ${className}`} />;
 }
 
 // ==========================================
@@ -1243,9 +1252,9 @@ export default function Index() {
   if (adminVisible) return <AdminPanel onExit={exitAdmin} />;
 
   return (
-    <div className="flex min-h-screen justify-center bg-muted">
-      <div className="relative flex min-h-screen w-full max-w-[430px] flex-col bg-background">
-        <div key={step} className="animate-screen-in flex min-h-0 flex-1 flex-col">
+    <div className="flex h-[100dvh] justify-center overflow-hidden bg-muted">
+      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-background">
+        <div key={step} className={`animate-screen-in flex min-h-0 flex-1 flex-col ${step === "app" ? "" : "overflow-y-auto"}`}>
           {step === "splash" && <Splash onNext={() => setStep("register")} />}
           {step === "register" && <Register user={user} setUser={setUser} onNext={() => setStep("app")} />}
           {step === "app" && (
@@ -1359,10 +1368,10 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
   
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <CrestImage className="w-8 h-8" /><span className="font-display text-xl tracking-wide">CD Lugo</span>
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-2">
+        <CrestImage className="w-9 h-9" /><span className="font-display text-xl tracking-wide">CD Lugo</span>
       </header>
-      <main key={tab} className="animate-screen-in flex-1 overflow-y-auto pb-28">
+      <main key={tab} className="animate-screen-in min-h-0 flex-1 overflow-y-auto">
         {tab === "cal" && <CalendarView matchesState={matchesState} />}
         {tab === "mode" && (
           <ModeView 
@@ -1393,21 +1402,21 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
         )}
 
       </main>
-      <nav className="fixed bottom-0 w-full max-w-[430px] border-t border-border bg-card px-6 pb-4 pt-2">
+      <nav className="shrink-0 w-full border-t border-border bg-card px-6 pb-2 pt-1">
         <div className="flex items-end justify-between">
           {items.map((it) => {
             const active = tab === it.id;
             if (it.id === "mode")
               return (
-                <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
-                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
-                  <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
+                <button key={it.id} onClick={() => setTab("mode")} className="-mt-6 flex flex-col items-center gap-0.5">
+                  <span className={`flex h-14 w-14 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-8 w-8" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
+                  <span className={`text-[11px] leading-tight ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
                 </button>
               );
             const Icon = it.id === "cal" ? Calendar : User;
             return (
-              <button key={it.id} onClick={() => setTab(it.id)} className={`flex w-20 flex-col items-center gap-1 py-2 ${active ? "text-primary" : "text-muted-foreground"}`}>
-                <Icon className="h-6 w-6" /><span className="text-xs">{it.label}</span>
+              <button key={it.id} onClick={() => setTab(it.id)} className={`flex w-20 flex-col items-center gap-0.5 py-1 ${active ? "text-primary" : "text-muted-foreground"}`}>
+                <Icon className="h-5 w-5" /><span className="text-[11px] leading-tight">{it.label}</span>
               </button>
             );
           })}
@@ -1418,19 +1427,23 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
 }
 
 function CalendarView({ matchesState }: { matchesState: MatchesState }) {
+  const [showAll, setShowAll] = useState(false);
   const currentNext = matchesState.next[0];
   const followingNext = matchesState.next.slice(1);
+  const visibleFollowing = showAll ? followingNext : followingNext.slice(0, 5);
+  const visiblePast = showAll ? matchesState.past : matchesState.past.slice(0, 5);
+  const hasMore = followingNext.length > 5 || matchesState.past.length > 5;
 
   return (
     <div className="px-5 py-6">
       <h2 className="font-display text-4xl tracking-wide">Calendario</h2>
-      
+
       {currentNext ? (
         <div className="mt-4 rounded-3xl border border-primary/60 bg-card p-5 shadow-glow">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">Próximo partido{currentNext.matchday ? ` · Jornada ${currentNext.matchday}` : ""}</p>
           <div className="mt-4 flex items-center justify-between">
             <div className="flex flex-col items-center gap-2">
-              <TeamCrest name={currentNext.home ? "CD Lugo" : currentNext.rival} className="w-12 h-12" />
+              <TeamCrest name={currentNext.home ? "CD Lugo" : currentNext.rival} className="h-[68px] w-[68px]" />
               <span className="text-sm font-semibold">{currentNext.home ? "CD Lugo" : currentNext.rival}</span>
             </div>
             <div className="text-center">
@@ -1438,11 +1451,14 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
               <p className="text-xs text-muted-foreground">{currentNext.date}</p>
             </div>
             <div className="flex flex-col items-center gap-2">
-              <TeamCrest name={!currentNext.home ? "CD Lugo" : currentNext.rival} className="w-12 h-12" />
+              <TeamCrest name={!currentNext.home ? "CD Lugo" : currentNext.rival} className="h-[68px] w-[68px]" />
               <span className="text-sm font-semibold">{!currentNext.home ? "CD Lugo" : currentNext.rival}</span>
             </div>
           </div>
-          <p className="mt-4 text-center text-sm text-muted-foreground">{currentNext.home ? "Estadio Anxo Carro" : "Fuera de casa"}</p>
+          <p className="mt-4 flex items-center justify-center gap-1 text-sm text-muted-foreground">
+            {currentNext.home ? <Home className="h-4 w-4" /> : <Plane className="h-4 w-4" />}
+            {currentNext.home ? "Estadio Anxo Carro" : "Fuera de casa"}
+          </p>
         </div>
       ) : (
         <div className="mt-4 rounded-3xl border border-border bg-card p-5 text-center text-muted-foreground">
@@ -1450,29 +1466,9 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
         </div>
       )}
 
-      {followingNext.length > 0 && (
-        <>
-          <h3 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Siguientes jornadas</h3>
-          <ul className="flex flex-col gap-2">
-            {followingNext.map((m) => (
-              <li key={m.rival} className="flex items-center justify-between rounded-2xl bg-card px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <TeamCrest name={m.rival} className="w-8 h-8" />
-                  <div>
-                    <p className="text-sm font-bold">{m.rival}</p>
-                    <p className="text-xs text-muted-foreground">{m.home ? "En casa (Anxo Carro)" : "Visitante"}</p>
-                  </div>
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground">{m.date}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
       <h3 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Últimos resultados</h3>
       <ul className="flex flex-col gap-2">
-        {matchesState.past.map((m, i) => {
+        {visiblePast.map((m, i) => {
           const gf = m.gf ?? 0;
           const ga = m.ga ?? 0;
           const w = gf > ga ? "V" : gf === ga ? "E" : "D";
@@ -1483,7 +1479,7 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
           return (
             <li key={m.id + i} className="animate-screen-in flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge}`}>{w}</span>
-              <TeamCrest name={m.rival} className="w-7 h-7 shrink-0" />
+              <TeamCrest name={m.rival} className="h-10 w-10 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-sm ${m.home ? "font-bold" : ""}`}>{l}</p>
                 <p className={`truncate text-sm ${!m.home ? "font-bold" : ""}`}>{v}</p>
@@ -1494,6 +1490,42 @@ function CalendarView({ matchesState }: { matchesState: MatchesState }) {
           );
         })}
       </ul>
+
+      {visibleFollowing.length > 0 && (
+        <>
+          <h3 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Siguientes jornadas</h3>
+          <ul className="flex flex-col gap-2">
+            {visibleFollowing.map((m) => {
+              const Where = m.home ? Home : Plane;
+              return (
+                <li key={m.id} className="flex items-center justify-between gap-2 rounded-2xl bg-card px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <TeamCrest name={m.rival} className="h-12 w-12 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">{m.rival}</p>
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Where className="h-3 w-3 shrink-0" />
+                        {m.home ? "En casa (Anxo Carro)" : "Visitante"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">{m.date}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => setShowAll((value) => !value)}
+          className="mt-5 w-full rounded-2xl border border-border bg-card py-3 text-sm font-semibold text-primary transition active:scale-95"
+        >
+          {showAll ? "Mostrar menos" : "Mostrar más"}
+        </button>
+      )}
     </div>
   );
 }
@@ -1585,33 +1617,35 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
           : "⏱️ Tiempo de desconexión (sin móvil)";
 
   return (
-    <div className="flex flex-col items-center px-5 py-6 text-center">
-      <p className={`text-xs font-bold uppercase tracking-widest mb-1 px-2 ${fanLooksActive ? (isAway && !isDuringHalfTime ? "text-stone-500" : "text-primary animate-pulse") : "text-stone-500"}`}>
+    <div className="flex h-full min-h-0 flex-col items-center px-4 pb-1 pt-1 text-center">
+      <p className={`mb-0.5 px-1 text-[10px] font-bold uppercase leading-tight tracking-widest ${fanLooksActive ? (isAway && !isDuringHalfTime ? "text-stone-500" : "text-primary animate-pulse") : "text-stone-500"}`}>
         {phaseText}
       </p>
 
       {resumeNotice && joinedFanMode && !isAway && (
-        <p className="animate-screen-in mb-1 rounded-full bg-primary px-4 py-1 text-xs font-bold uppercase tracking-widest text-primary-foreground">
+        <p className="animate-screen-in mb-0.5 rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary-foreground">
           ▶ Modo Fan reactivado
         </p>
       )}
 
-      <h2 className="font-display text-4xl tracking-wide">Modo Anxo Carro</h2>
-      
-      <div className="relative mt-6 h-[280px] w-[280px]">
+      <h2 className="font-display text-[clamp(24px,6dvh,34px)] leading-none tracking-wide">Modo Anxo Carro</h2>
+
+      {/* El aro crece con la pantalla pero nunca la desborda: la pantalla del
+          modo fan cabe entera y la barra inferior queda siempre a la vista. */}
+      <div className="relative my-auto aspect-square w-[min(280px,35dvh,82vw)] shrink-0">
         <svg viewBox="0 0 280 280" className="absolute inset-0 -rotate-90">
           <circle cx="140" cy="140" r={R} stroke="var(--muted)" strokeWidth="14" fill="none" />
-          
+
           {joinedFanMode && matchTimer >= 0 && (
-            <circle 
-              cx="140" cy="140" r={R} 
-              stroke="var(--primary)" 
-              strokeWidth="14" 
-              fill="none" 
-              strokeLinecap="butt" 
-              strokeDasharray={C} 
-              strokeDashoffset={C * (1 - progressPct)} 
-              className="transition-all duration-1000 motion-reduce:transition-none" 
+            <circle
+              cx="140" cy="140" r={R}
+              stroke="var(--primary)"
+              strokeWidth="14"
+              fill="none"
+              strokeLinecap="butt"
+              strokeDasharray={C}
+              strokeDashoffset={C * (1 - progressPct)}
+              className="transition-all duration-1000 motion-reduce:transition-none"
             />
           )}
 
@@ -1631,74 +1665,76 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
               />
             ))}
 
-          <circle 
-            cx="140" cy="140" r={R} 
-            stroke="#4b5563" 
-            strokeWidth="14" 
-            fill="none" 
-            strokeLinecap="butt" 
-            strokeDasharray={C} 
-            strokeDashoffset={C * (1 - preFanPct)} 
-            className="transition-all duration-1000 motion-reduce:transition-none" 
+          <circle
+            cx="140" cy="140" r={R}
+            stroke="#4b5563"
+            strokeWidth="14"
+            fill="none"
+            strokeLinecap="butt"
+            strokeDasharray={C}
+            strokeDashoffset={C * (1 - preFanPct)}
+            className="transition-all duration-1000 motion-reduce:transition-none"
           />
         </svg>
-        
+
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="relative flex h-40 w-40 items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
-            <Ball className="h-24 w-24" />
+          <div className="relative flex aspect-square w-[min(160px,21dvh,46vw)] items-center justify-center rounded-full bg-card" role="img" aria-label="Balón de fútbol clásico">
+            <Ball className="h-[72%] w-[72%]" />
           </div>
-          <p className={`mt-2 font-display text-3xl ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`}>
+          <p className={`mt-1 font-display text-[clamp(20px,5dvh,30px)] leading-none ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`}>
             {displayMatchClock}
           </p>
         </div>
       </div>
 
-      <div className="mt-6 w-full rounded-3xl bg-card p-5 flex flex-col gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">
-            {timerLabel}
-          </p>
-          <p className={`font-display text-5xl tracking-wider ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`} role="timer" aria-label="Cronómetro de desconexión">
+      <div className="mt-1 w-full shrink-0 rounded-3xl bg-card px-4 py-2.5">
+        <p className="text-[10px] uppercase leading-tight tracking-widest text-muted-foreground">
+          {timerLabel}
+        </p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className={`font-display text-[clamp(30px,7dvh,44px)] leading-none tracking-wider ${fanLooksActive ? "text-primary" : "text-stone-600 dark:text-stone-400"}`} role="timer" aria-label="Cronómetro de desconexión">
             {joinedFanMode ? formattedDisconnectionTime : "00:00"}
           </p>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="truncate text-xs text-muted-foreground">
             {currentMatch ? `CD Lugo vs ${currentMatch.rival}` : "Jornada completada"}
           </p>
-
-          {joinedFanMode && lockGuard === "off" && (
-            <button
-              type="button"
-              onClick={onEnableLockGuard}
-              className="mt-3 w-full rounded-xl border border-primary/50 px-3 py-2 text-xs font-semibold text-primary"
-            >
-              📴 Mejorar la detección al apagar la pantalla
-            </button>
-          )}
-
-          {joinedFanMode && notificationState !== "granted" && notificationState !== "unknown" && (
-            notificationState === "default" ? (
-              <button
-                type="button"
-                onClick={onEnableNotifications}
-                className="mt-3 w-full rounded-xl border border-primary/50 px-3 py-2 text-xs font-semibold text-primary"
-              >
-                🔔 Activar aviso al salir de la app
-              </button>
-            ) : (
-              <p className="mt-3 text-xs text-muted-foreground">
-                {notificationState === "insecure"
-                  ? "🔒 Abre la app por HTTPS para recibir avisos en el móvil"
-                  : notificationState === "denied"
-                    ? "🔕 Notificaciones bloqueadas en el navegador"
-                    : "🔕 Este navegador no admite avisos"}
-              </p>
-            )
-          )}
         </div>
 
-        <Btn 
+        {joinedFanMode && lockGuard === "off" && (
+          <button
+            type="button"
+            onClick={onEnableLockGuard}
+            className="mt-1.5 w-full rounded-lg border border-primary/40 px-2 py-1 text-[10px] font-semibold text-primary"
+          >
+            📴 Mejorar la detección al apagar la pantalla
+          </button>
+        )}
+
+        {joinedFanMode && notificationState !== "granted" && notificationState !== "unknown" && (
+          notificationState === "default" ? (
+            <button
+              type="button"
+              onClick={onEnableNotifications}
+              className="mt-1.5 w-full rounded-lg border border-primary/40 px-2 py-1 text-[10px] font-semibold text-primary"
+            >
+              🔔 Activar aviso al salir de la app
+            </button>
+          ) : (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              {notificationState === "insecure"
+                ? "🔒 Abre la app por HTTPS para recibir avisos en el móvil"
+                : notificationState === "denied"
+                  ? "🔕 Notificaciones bloqueadas en el navegador"
+                  : "🔕 Este navegador no admite avisos"}
+            </p>
+          )
+        )}
+
+        <button
+          type="button"
           onClick={onJoinFanMode}
           disabled={joinedFanMode}
+          className="mt-2 w-full rounded-xl bg-primary py-2 font-display text-xl tracking-wider text-primary-foreground shadow-glow transition active:scale-95 disabled:opacity-40"
         >
           {joinedFanMode
             ? isAway
@@ -1709,7 +1745,7 @@ function ModeView({ matchesState, matchTimer, joinedFanMode, onJoinFanMode, disc
                   ? "⏸️ En Descanso"
                   : "¡Modo Fan Activo! 🏟️"
             : "Entrar al Modo Fan"}
-        </Btn>
+        </button>
       </div>
     </div>
   );
