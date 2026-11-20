@@ -62,7 +62,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
 
   const reload = async (announce = false) => {
     setStatus({ kind: "busy", text: "Leyendo la hoja…" });
-    const remote = await loadMatchesFromSheet();
+    const remote = await loadMatchesFromSheet(true);
     if (remote && remote.length > 0) {
       setMatches(remote);
       setSource("sheet");

@@ -523,6 +523,16 @@ export function writeCachedMatches(matches: Match[]): void {
   }
 }
 
+/**
+ * El calendario cambia muy poco (cuando el panel guarda un resultado), así que
+ * no hace falta bajarlo en cada visita ni en cada cambio de pestaña. Con 2000
+ * móviles, una lectura por usuario y minuto agotaría las ejecuciones de Apps
+ * Script. La copia en memoria se comparte durante esta sesión de la página;
+ * el panel usa `force: true` para ver siempre el dato recién escrito.
+ */
+const MATCHES_TTL_MS = 5 * 60_000;
+let matchesCache: { at: number; matches: Match[] } | null = null;
+
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 type JsonObject = Record<string, unknown>;
@@ -592,9 +602,13 @@ function matchesUrl(): string {
  * Descarga el calendario de la hoja. Devuelve `[]` si la hoja dice que no hay
  * partidos, y `null` si no se pudo leer (sin URL, sin red o script antiguo).
  */
-export async function loadMatchesFromSheet(): Promise<Match[] | null> {
+export async function loadMatchesFromSheet(force = false): Promise<Match[] | null> {
   const url = matchesUrl();
   if (!url) return null;
+
+  if (!force && matchesCache && Date.now() - matchesCache.at < MATCHES_TTL_MS) {
+    return matchesCache.matches;
+  }
 
   try {
     const data = await jsonp(url);
@@ -604,6 +618,7 @@ export async function loadMatchesFromSheet(): Promise<Match[] | null> {
 
     const matches = raw.map(normalizeMatch).filter((match): match is Match => match !== null);
     writeCachedMatches(matches);
+    matchesCache = { at: Date.now(), matches };
     return matches;
   } catch {
     return null;
@@ -629,7 +644,7 @@ const matchKey = (match: Match): string => {
 async function confirmMatch(match: Match): Promise<boolean> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await wait(attempt === 0 ? 700 : 1200);
-    const list = await loadMatchesFromSheet();
+    const list = await loadMatchesFromSheet(true);
     if (list === null) continue;
     const found = list.find((item) => item.id === match.id);
     if (found && matchKey(found) === matchKey(match)) return true;
@@ -669,7 +684,7 @@ export async function deleteMatch(id: string, token: string): Promise<boolean> {
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await wait(attempt === 0 ? 700 : 1200);
-    const list = await loadMatchesFromSheet();
+    const list = await loadMatchesFromSheet(true);
     if (list === null) continue;
     if (!list.some((item) => item.id === id)) return true;
   }

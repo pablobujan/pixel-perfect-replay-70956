@@ -139,15 +139,16 @@ function TeamCrest({ name, className = "w-8 h-8" }: { name: string; className?: 
   );
 }
 
-function Ball({ className = "", color = "var(--primary)" }: { className?: string; color?: string }) {
-  const clipId = `balon-${useId().replace(/:/g, "")}`;
+function Ball({ className = "", color = "var(--primary)", clipId }: { className?: string; color?: string; clipId?: string }) {
+  const generatedId = useId().replace(/:/g, "");
+  const id = clipId ?? `balon-${generatedId}`;
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <defs>
-        <clipPath id={clipId}><circle cx="12" cy="12" r="10.5" /></clipPath>
+        <clipPath id={id}><circle cx="12" cy="12" r="10.5" /></clipPath>
       </defs>
       <circle cx="12" cy="12" r="10.5" fill="var(--card)" />
-      <g clipPath={`url(#${clipId})`} stroke={color} strokeWidth=".65" strokeLinejoin="round">
+      <g clipPath={`url(#${id})`} stroke={color} strokeWidth=".65" strokeLinejoin="round">
         {/* Pentágono central y cinco paneles: el balón clásico de siempre. */}
         <path d="M12 7 L16.76 10.46 L14.94 16.05 H9.06 L7.24 10.46 Z" fill={color} />
         <path d="M9 0 H15 L15.5 3.4 L12 5 L8.5 3.4 Z M0 6 L3.2 5.8 L5.4 9 L3.5 12 L0 11 Z M24 6 L20.8 5.8 L18.6 9 L20.5 12 L24 11 Z M2 21 L4.5 16.8 L8 17.2 L9 20.8 L6 24 Z M22 21 L19.5 16.8 L16 17.2 L15 20.8 L18 24 Z" fill={color} />
@@ -262,7 +263,6 @@ const LOCK_CANCEL_WINDOW_MS = 8_000;
 // Cada cuánto se manda el estado del socio a la hoja de Google mientras dura
 // el modo fan. Con 30 s, como mucho se pierden los últimos 30 s si el móvil
 // muere; al salir de la app se manda además un envío inmediato (sendBeacon).
-const SHEET_HEARTBEAT_MS = 30_000;
 
 type NotificationState = "unknown" | "granted" | "denied" | "default" | "unsupported" | "insecure";
 
@@ -572,20 +572,32 @@ export default function Index() {
   const refreshMatchesAfterAdmin = useCallback(() => {
     const cached = readCachedMatches();
     if (cached && cached.length > 0) setMatchList(cached);
-    void loadMatchesFromSheet().then((list) => {
+    void loadMatchesFromSheet(true).then((list) => {
       if (list && list.length > 0) setMatchList(list);
     });
   }, []);
 
-  // Calendario remoto: se carga al abrir, al volver a la app y cada 5 minutos.
-  // Si la hoja no responde se queda la copia local, sin romper nada.
+  // Calendario remoto: se baja al abrir y se renueva cada 5-8 minutos con un
+  // intervalo aleatorio, para que 2000 móviles no pidan datos a la vez. La
+  // propia carga ya usa una caché de 5 min, así que las visitas rápidas no
+  // consumen ejecuciones del script. Si la hoja no responde, queda la copia local.
   useEffect(() => {
     if (typeof window === "undefined") return;
     let cancelled = false;
+    let timer = 0;
 
     const sync = async () => {
       const list = await loadMatchesFromSheet();
       if (!cancelled && list && list.length > 0) setMatchList(list);
+    };
+
+    const schedule = () => {
+      const delay = 5 * 60_000 + Math.random() * 3 * 60_000;
+      timer = window.setTimeout(() => {
+        void sync().finally(() => {
+          if (!cancelled) schedule();
+        });
+      }, delay);
     };
 
     void sync();
@@ -593,12 +605,12 @@ export default function Index() {
       if (document.visibilityState === "visible") void sync();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const timer = window.setInterval(() => void sync(), 5 * 60_000);
+    schedule();
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, []);
 
@@ -1204,23 +1216,24 @@ export default function Index() {
       );
     };
 
-    // Alta inmediata y latido periódico (también marca el final del partido).
+    // Un solo envío al entrar, otro al terminar el partido y otro al cerrar.
+    // El latido de 30 s se quitó: con 2000 socios eran 360.000 escrituras por
+    // partido y Apps Script las rechazaba. Los minutos se calculan en el móvil
+    // con marcas de tiempo, así que no hace falta enviarlos cada medio minuto.
     push(false);
-    const timer = window.setInterval(() => push(false), SHEET_HEARTBEAT_MS);
+    const restante = (matchTiming(matchExtra).total - matchTimer) * 1000;
+    const finishTimer =
+      restante > 0 && restante < 2_147_483_647
+        ? window.setTimeout(() => push(true), restante)
+        : null;
 
-    // Al ocultar o abandonar la página se usa sendBeacon: el navegador puede
-    // congelar o cerrar la pestaña y un fetch normal no llegaría a salir.
-    const handleHidden = () => {
-      if (document.visibilityState === "hidden") push(true);
-    };
+    // sendBeacon sobrevive a que la pestaña se cierre. No enviamos al ocultar
+    // la pantalla: eso sumaría un envío cada vez que el socio enciende el móvil.
     const handlePageHide = () => push(true);
-
-    document.addEventListener("visibilitychange", handleHidden);
     window.addEventListener("pagehide", handlePageHide);
 
     return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", handleHidden);
+      if (finishTimer !== null) window.clearTimeout(finishTimer);
       window.removeEventListener("pagehide", handlePageHide);
     };
   }, [
@@ -1375,7 +1388,7 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3">
         <CrestImage className="w-8 h-8" /><span className="font-display text-xl tracking-wide">CD Lugo</span>
       </header>
-      <main key={tab} className="animate-screen-in min-h-0 flex-1 overflow-y-auto">
+      <main key={tab} className="animate-tab-in min-h-0 flex-1 overflow-y-auto">
         {tab === "cal" && <CalendarView matchesState={matchesState} />}
         {tab === "mode" && (
           <ModeView 
@@ -1412,8 +1425,8 @@ function AppShell({ user, setUser, matchesState, matchTimer, joinedFanMode, onJo
             const active = tab === it.id;
             if (it.id === "mode")
               return (
-                <button key={it.id} onClick={() => setTab("mode")} className="-mt-8 flex flex-col items-center gap-1">
-                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
+                <button key={it.id} onClick={() => setTab("mode")} className="relative z-10 -mt-8 flex flex-col items-center gap-1">
+                  <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? "bg-primary shadow-glow" : "bg-muted"}`}><Ball className="h-9 w-9" clipId="balon-nav" color={active ? "var(--primary-foreground)" : "var(--primary)"} /></span>
                   <span className={`text-xs ${active ? "text-primary" : "text-muted-foreground"}`}>{it.label}</span>
                 </button>
               );
