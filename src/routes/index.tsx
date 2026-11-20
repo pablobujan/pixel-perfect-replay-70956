@@ -1288,7 +1288,7 @@ function Register({ onNext, user, setUser }: { onNext: () => void } & UserProps)
         <div className="mt-4 border-t border-border pt-4">
           <p className="text-xs font-bold uppercase tracking-widest text-primary">El premio</p>
           <p className="mt-2 text-sm leading-snug text-muted-foreground">
-            Todos los que estén todo el partido sin usar el móvil entran en el concurso. Si sales de la web, el cronómetro se para y esos minutos no cuentan: menos tiempo sin móvil, menos opciones de premio.
+            Todos los que estén todo el partido sin usar el móvil entran en el concurso. Si sales de la web, el cronómetro se para y esos minutos no cuentan: cuanto más tiempo pases sin móvil, más opciones tienes de premio.
           </p>
           <p className="mt-3 rounded-2xl bg-primary/10 px-4 py-3 text-sm font-semibold leading-snug text-primary">
             «Prohibido mirar el móvil… aunque marque el Lugo. Sobre todo aunque marque el Lugo.»
