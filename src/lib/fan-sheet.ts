@@ -97,6 +97,49 @@ export function isFanSheetEnabled(): boolean {
   return getFanSheetEndpoint() !== "";
 }
 
+/** URL compilada en la app, sin tener en cuenta pruebas ni localStorage. */
+export function getDefaultFanSheetEndpoint(): string {
+  const fromEnv = envEndpoint();
+  return isValidEndpoint(fromEnv) ? fromEnv : "";
+}
+
+/** Hay una URL de prueba activa, ya sea por `?sheet=` o por localStorage. */
+export function hasFanSheetOverride(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (new URLSearchParams(window.location.search).has("sheet")) return true;
+  } catch {
+    // Sin URLSearchParams solo miramos localStorage.
+  }
+  try {
+    return Boolean(window.localStorage.getItem(ENDPOINT_STORAGE_KEY)?.trim());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Vuelve a la hoja oficial: borra la URL de prueba guardada y la quita de la
+ * dirección para que no se vuelva a aplicar en la siguiente carga.
+ */
+export function resetFanSheetOverride(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(ENDPOINT_STORAGE_KEY);
+  } catch {
+    // Sin localStorage seguimos con la URL.
+  }
+  try {
+    const current = new URL(window.location.href);
+    if (current.searchParams.has("sheet")) {
+      current.searchParams.delete("sheet");
+      window.history.replaceState(window.history.state, "", current.toString());
+    }
+  } catch {
+    // Si no se puede reescribir la URL, al menos ya se borró localStorage.
+  }
+}
+
 /** Identificador estable de la sesión de modo fan (una fila por sesión). */
 export function makeSessionId(): string {
   try {

@@ -9,7 +9,13 @@
 // Script no manda cabeceras CORS y un fetch normal no podría leer la respuesta.
 // La escritura usa el mismo POST `no-cors` que los tiempos del premio.
 
-import { getFanSheetEndpoint, postSheetPayload } from "@/lib/fan-sheet";
+import {
+  getDefaultFanSheetEndpoint,
+  getFanSheetEndpoint,
+  hasFanSheetOverride,
+  postSheetPayload,
+  resetFanSheetOverride,
+} from "@/lib/fan-sheet";
 
 export type Match = {
   id: string;
@@ -595,8 +601,7 @@ function jsonp(url: string, timeoutMs = 15000): Promise<JsonObject> {
   });
 }
 
-function matchesUrl(): string {
-  const base = getFanSheetEndpoint();
+function matchesUrlFrom(base: string): string {
   if (!base) return "";
   try {
     const url = new URL(base);
@@ -607,31 +612,48 @@ function matchesUrl(): string {
   }
 }
 
+async function fetchMatchesFrom(url: string): Promise<Match[] | null> {
+  try {
+    const data = await jsonp(url, 25000);
+    if (data["ok"] !== true) return null;
+    const raw = data["partidos"];
+    if (!Array.isArray(raw)) return null;
+    return raw.map(normalizeMatch).filter((match): match is Match => match !== null);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Descarga el calendario de la hoja. Devuelve `[]` si la hoja dice que no hay
  * partidos, y `null` si no se pudo leer (sin URL, sin red o script antiguo).
+ * Si queda una URL de prueba guardada y falla, vuelve automáticamente a la
+ * hoja oficial: es lo que pasaba al dejar una prueba con `?sheet=...`.
  */
 export async function loadMatchesFromSheet(force = false): Promise<Match[] | null> {
-  const url = matchesUrl();
+  const url = matchesUrlFrom(getFanSheetEndpoint());
+  // Se mira antes de cualquier espera: la otra carga de la página puede limpiar
+  // la URL de prueba mientras esta todavía está intentando leer la hoja.
+  const hadOverride = hasFanSheetOverride();
   if (!url) return null;
 
   if (!force && matchesCache && Date.now() - matchesCache.at < MATCHES_TTL_MS) {
     return matchesCache.matches;
   }
 
-  try {
-    const data = await jsonp(url);
-    if (data["ok"] !== true) return null;
-    const raw = data["partidos"];
-    if (!Array.isArray(raw)) return null;
+  let matches = await fetchMatchesFrom(url);
 
-    const matches = raw.map(normalizeMatch).filter((match): match is Match => match !== null);
-    writeCachedMatches(matches);
-    matchesCache = { at: Date.now(), matches };
-    return matches;
-  } catch {
-    return null;
+  if (!matches && hadOverride) {
+    resetFanSheetOverride();
+    const official = matchesUrlFrom(getDefaultFanSheetEndpoint());
+    if (official && official !== url) matches = await fetchMatchesFrom(official);
   }
+
+  if (!matches) return null;
+
+  writeCachedMatches(matches);
+  matchesCache = { at: Date.now(), matches };
+  return matches;
 }
 
 const matchKey = (match: Match): string => {

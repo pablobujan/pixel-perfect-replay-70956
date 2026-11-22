@@ -25,7 +25,11 @@ import {
   toLocalInput,
   type Match,
 } from "@/lib/matches";
-import { getFanSheetEndpoint } from "@/lib/fan-sheet";
+import {
+  getFanSheetEndpoint,
+  hasFanSheetOverride,
+  resetFanSheetOverride,
+} from "@/lib/fan-sheet";
 
 const TOKEN_KEY = "anxo-carro:admin-token";
 
@@ -59,6 +63,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [draft, setDraft] = useState<Match | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [sheetOverride, setSheetOverride] = useState(hasFanSheetOverride);
 
   const sheetConfigured = getFanSheetEndpoint() !== "";
 
@@ -68,6 +73,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
     if (remote && remote.length > 0) {
       setMatches(remote);
       setSource("sheet");
+      if (sheetOverride && !hasFanSheetOverride()) setSheetOverride(false);
       setStatus(announce ? { kind: "ok", text: `Calendario actualizado (${remote.length} partidos).` } : { kind: "idle", text: "" });
     } else {
       const cached = readCachedMatches() ?? DEFAULT_MATCHES;
@@ -79,7 +85,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
           : {
               kind: "error",
               text: sheetConfigured
-                ? "No se pudo leer la hoja. ¿Está desplegado el script nuevo como «Cualquier persona»?"
+                ? "No se pudo leer la hoja ahora. Se muestra la copia local; pulsa «Recargar» para intentarlo de nuevo."
                 : "Falta la URL de la hoja (VITE_FAN_SHEET_URL o ?sheet=).",
             },
       );
@@ -212,6 +218,19 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
         >
           <RefreshCw className="h-4 w-4" /> Recargar
         </button>
+        {sheetOverride && (
+          <button
+            type="button"
+            onClick={() => {
+              resetFanSheetOverride();
+              setSheetOverride(false);
+              void reload(true);
+            }}
+            className="flex items-center gap-2 rounded-lg border border-primary px-3 py-2 text-sm text-primary"
+          >
+            Usar hoja oficial
+          </button>
+        )}
         <button
           type="button"
           onClick={() =>
