@@ -29,8 +29,10 @@ import {
 import { useNow } from "@/hooks/use-now";
 import { AdminPanel } from "@/components/admin-panel";
 import {
+  clearMatchesMemoryCache,
   DEFAULT_MATCHES,
   loadMatchesFromSheet,
+  MATCHES_CACHE_KEY,
   matchLabel,
   partitionMatches,
   readCachedMatches,
@@ -551,12 +553,22 @@ export default function Index() {
     const onVisible = () => {
       if (document.visibilityState === "visible") void sync();
     };
+    // Si el panel guarda en otra pestaña, la copia nueva llega por localStorage.
+    // La aplicamos ya, sin esperar al ritmo de sincronización de 5-8 minutos.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== MATCHES_CACHE_KEY || !event.newValue) return;
+      clearMatchesMemoryCache();
+      const cached = readCachedMatches();
+      if (!cancelled && cached && cached.length > 0) setMatchList(cached);
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("storage", onStorage);
     schedule();
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("storage", onStorage);
       window.clearTimeout(timer);
     };
   }, []);

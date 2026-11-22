@@ -12,10 +12,12 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, CloudOff, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import {
+  clearMatchesMemoryCache,
   DEFAULT_MATCHES,
   deleteMatch,
   fromLocalInput,
   loadMatchesFromSheet,
+  MATCHES_CACHE_KEY,
   matchLabel,
   newMatchId,
   readCachedMatches,
@@ -89,6 +91,23 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
     void reload();
     // Solo al abrir el panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== MATCHES_CACHE_KEY || !event.newValue) return;
+      // Otra pestaña ha guardado: tomamos su copia sin volver a escribirla
+      // (si no, dos paneles se estarían avisando sin parar).
+      clearMatchesMemoryCache();
+      const cached = readCachedMatches();
+      if (!cached || cached.length === 0) return;
+      setMatches(cached);
+      setSource("sheet");
+      setReloadKey((value) => value + 1);
+      setStatus({ kind: "ok", text: "Calendario actualizado desde otra pestaña." });
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const handleSave = async (match: Match): Promise<boolean> => {
@@ -244,8 +263,8 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
       </div>
 
       <p className="mt-8 text-center text-[11px] leading-snug text-muted-foreground">
-        Al guardar, la app de los móviles se actualiza sola en unos minutos (o al volver a abrirla). No hace falta
-        tocar código ni volver a publicar.
+        Al guardar, las pestañas abiertas se actualizan al instante. En otros móviles el cambio aparece al abrir la
+        app o en unos minutos. No hace falta tocar código ni volver a publicar.
       </p>
     </div>
   );

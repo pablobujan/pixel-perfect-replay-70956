@@ -31,7 +31,7 @@ export type Match = {
 
 export type MatchesState = { past: Match[]; next: Match[] };
 
-const CACHE_KEY = "anxo-carro:matches-v6";
+export const MATCHES_CACHE_KEY = "anxo-carro:matches-v6";
 /** Margen tras el kickoff para dar un partido por terminado si no se marcó. */
 const AUTO_PAST_MS = 3 * 60 * 60 * 1000;
 
@@ -499,7 +499,7 @@ export function normalizeMatch(input: unknown): Match | null {
 function readCacheRaw(): unknown {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
+    const raw = window.localStorage.getItem(MATCHES_CACHE_KEY);
     return raw ? (JSON.parse(raw) as unknown) : null;
   } catch {
     return null;
@@ -517,10 +517,19 @@ export function readCachedMatches(): Match[] | null {
 export function writeCachedMatches(matches: Match[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(matches));
+    window.localStorage.setItem(MATCHES_CACHE_KEY, JSON.stringify(matches));
   } catch {
     // Sin localStorage seguimos con lo que haya en memoria.
   }
+}
+
+/**
+ * Otra pestaña ha escrito una copia nueva en localStorage: descartamos la
+ * copia en memoria de esta pestaña para que la próxima lectura no devuelva
+ * datos antiguos durante los 5 minutos de caché.
+ */
+export function clearMatchesMemoryCache(): void {
+  matchesCache = null;
 }
 
 /**
