@@ -63,7 +63,7 @@ export const Route = createFileRoute("/")({
 
 // Las imágenes se sirven con una versión en la URL para que el móvil no se
 // quede con la copia antigua en caché tras normalizar los escudos.
-const crestSrc = (file: string) => `${file}?v=4`;
+const crestSrc = (file: string) => `${file}?v=5`;
 
 // En el servidor no hay layout: el prerenderizado usa useEffect y el navegador
 // mide antes de pintar para que no se vea el salto de escala.
