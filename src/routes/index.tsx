@@ -63,7 +63,7 @@ export const Route = createFileRoute("/")({
 
 // Las imágenes se sirven con una versión en la URL para que el móvil no se
 // quede con la copia antigua en caché tras normalizar los escudos.
-const crestSrc = (file: string) => `${file}?v=3`;
+const crestSrc = (file: string) => `${file}?v=4`;
 
 // En el servidor no hay layout: el prerenderizado usa useEffect y el navegador
 // mide antes de pintar para que no se vea el salto de escala.
@@ -87,6 +87,8 @@ const CRESTS: Record<string, string> = {
   "Lugo": "/lugo.png",
   "CP Cacereño": "/cacereno.png",
   "Cacereño": "/cacereno.png",
+  "CD Coria": "/coria.png",
+  "Coria": "/coria.png",
   "AD Mérida": "/merida.png",
   "Mérida": "/merida.png",
   "Mirandés": "/mirandes.png",
@@ -97,6 +99,8 @@ const CRESTS: Record<string, string> = {
   "Zamora CF": "/zamora.png",
   "Racing Ferrol": "/ferrol.png",
   "Real Avilés": "/aviles.png",
+  "Real Unión": "/real-union.png",
+  "Real Union": "/real-union.png",
   "UD Logroñés": "/logrones.png",
   "Depor Fabril": "/depor.png",
   "Arenas Club": "/arenas.png",
