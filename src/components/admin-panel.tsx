@@ -9,7 +9,7 @@
 // el enlace pueda cambiar el calendario por diversión.
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, CloudOff, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, CloudOff, Eye, EyeOff, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import {
   clearMatchesMemoryCache,
@@ -64,6 +64,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
   const [draft, setDraft] = useState<Match | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sheetOverride, setSheetOverride] = useState(hasFanSheetOverride);
+  const [showToken, setShowToken] = useState(false);
 
   const sheetConfigured = getFanSheetEndpoint() !== "";
 
@@ -135,7 +136,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
     }
     setStatus({
       kind: "error",
-      text: "No se pudo confirmar el guardado. Revisa la clave y que el Apps Script esté actualizado y redesplegado.",
+      text: "No se pudo confirmar el guardado. Pulsa «Mostrar», comprueba la clave del panel y vuelve a guardar.",
     });
     return false;
   };
@@ -154,7 +155,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
       await reload();
       setStatus({ kind: "ok", text: `Borrado: ${match.rival}.` });
     } else {
-      setStatus({ kind: "error", text: "No se pudo confirmar el borrado. Revisa la clave." });
+      setStatus({ kind: "error", text: "No se pudo confirmar el borrado. Pulsa «Mostrar» y comprueba la clave del panel." });
     }
   };
 
@@ -177,12 +178,23 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
       </header>
 
       <section className="mt-5 rounded-2xl border border-border bg-card p-4">
-        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground" htmlFor="admin-token">
-          Clave del panel
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground" htmlFor="admin-token">
+            Clave del panel
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowToken((value) => !value)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            aria-label={showToken ? "Ocultar clave" : "Mostrar clave"}
+          >
+            {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showToken ? "Ocultar" : "Mostrar"}
+          </button>
+        </div>
         <input
           id="admin-token"
-          type="password"
+          type={showToken ? "text" : "password"}
           value={token}
           onChange={(event) => setToken(event.target.value)}
           onBlur={() => writeToken(token.trim())}
@@ -191,7 +203,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
           autoComplete="current-password"
         />
         <p className="mt-2 text-xs leading-snug text-muted-foreground">
-          Se guarda solo en este móvil. Sin la clave correcta, la hoja rechaza los cambios.
+          Se guarda solo en este móvil. Si el guardado falla, pulsa «Mostrar» y comprueba la clave antes de volver a intentarlo.
         </p>
       </section>
 
