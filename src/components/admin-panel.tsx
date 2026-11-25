@@ -15,12 +15,14 @@ import {
   clearMatchesMemoryCache,
   DEFAULT_MATCHES,
   deleteMatch,
+  forgetDeletedMatch,
   fromLocalInput,
   loadMatchesFromSheet,
   MATCHES_CACHE_KEY,
   matchLabel,
   newMatchId,
   readCachedMatches,
+  rememberSavedMatch,
   saveMatch,
   toLocalInput,
   type Match,
@@ -37,6 +39,32 @@ type Status = { kind: "idle" | "busy" | "ok" | "error"; text: string };
 
 const inputClass =
   "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary";
+
+/** Traduce el error devuelto por Apps Script sin ocultar su código. */
+function writeErrorText(error?: string): string {
+  const code = (error ?? "desconocido").trim();
+  const detail =
+    code === "token"
+      ? "La clave del panel no coincide con la del script. Pulsa «Mostrar», corrígela y vuelve a guardar."
+      : code === "red"
+        ? "El navegador no pudo conectar con Google Sheets. Comprueba la conexión y que ningún bloqueador impida script.google.com."
+        : code === "url"
+          ? "Falta la URL de la hoja. Abre reset.html o pulsa «Usar hoja oficial»."
+          : code === "ocupado"
+            ? "Google Sheets está ocupado. Espera un momento y vuelve a guardar."
+            : code === "json"
+              ? "El script no recibió bien los datos. Abre panel.html?admin=1 y vuelve a intentarlo."
+              : code === "respuesta"
+                ? "La hoja respondió, pero el navegador no pudo leer la confirmación."
+                : code === "id"
+                  ? "Falta el identificador del partido."
+                  : code === "rival"
+                    ? "Falta el nombre del rival."
+                    : code === "kickoff"
+                      ? "La fecha del partido no es válida."
+                      : "La hoja devolvió un error inesperado.";
+  return `${detail} (código: ${code})`;
+}
 
 function readToken(): string {
   if (typeof window === "undefined") return "";
@@ -124,20 +152,18 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
     }
     setBusyId(match.id);
     setStatus({ kind: "busy", text: "Guardando…" });
-    const ok = await saveMatch(match, token);
+    const result = await saveMatch(match, token);
     setBusyId(null);
-    if (ok) {
+    if (result.ok) {
       writeToken(token.trim());
-      // Primero se relee la hoja (deja el estado en blanco) y después se anuncia
-      // el resultado, para que el mensaje no desaparezca al instante.
+      // La hoja ya confirmó el cambio: se refleja en la copia local antes de
+      // releer, para que no parezca que se ha perdido si falla la lectura.
+      rememberSavedMatch(match);
       await reload();
       setStatus({ kind: "ok", text: `Guardado: ${match.rival}.` });
       return true;
     }
-    setStatus({
-      kind: "error",
-      text: "No se pudo confirmar el guardado. Pulsa «Mostrar», comprueba la clave del panel y vuelve a guardar.",
-    });
+    setStatus({ kind: "error", text: writeErrorText(result.error) });
     return false;
   };
 
@@ -149,13 +175,14 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
     if (typeof window !== "undefined" && !window.confirm(`¿Borrar ${match.rival} del calendario?`)) return;
     setBusyId(match.id);
     setStatus({ kind: "busy", text: "Borrando…" });
-    const ok = await deleteMatch(match.id, token);
+    const result = await deleteMatch(match.id, token);
     setBusyId(null);
-    if (ok) {
+    if (result.ok) {
+      forgetDeletedMatch(match.id);
       await reload();
       setStatus({ kind: "ok", text: `Borrado: ${match.rival}.` });
     } else {
-      setStatus({ kind: "error", text: "No se pudo confirmar el borrado. Pulsa «Mostrar» y comprueba la clave del panel." });
+      setStatus({ kind: "error", text: writeErrorText(result.error) });
     }
   };
 

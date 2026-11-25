@@ -2,8 +2,9 @@
 //
 // La app no puede escribir directamente en una hoja de cálculo, así que manda
 // un JSON a la URL de una "aplicación web" de Apps Script. El script busca la
-// fila de esa sesión y la crea o actualiza. No se espera respuesta: se usa
-// `no-cors` para no necesitar CORS y `sendBeacon` cuando la página se oculta.
+// fila de esa sesión y la crea o actualiza. Los tiempos del premio se envían
+// sin esperar respuesta (`no-cors` y `sendBeacon` al ocultar la página); el
+// panel lee la respuesta con CORS para saber si el cambio se guardó.
 //
 // Configuración:
 // - `VITE_FAN_SHEET_URL` en `.env.local` (recomendado: queda compilado en la
@@ -50,6 +51,9 @@ const ENDPOINT_STORAGE_KEY = "anxo-carro:sheet-url";
 const MAX_QUEUE = 50;
 
 type QueueItem = { payload: FanSnapshot };
+
+/** Resultado de una escritura que sí espera respuesta (panel de partidos). */
+export type SheetPostResult = { ok: boolean; error?: string };
 
 const isValidEndpoint = (value: string): boolean => /^https?:\/\//i.test(value);
 
@@ -275,6 +279,47 @@ export async function postSheetPayload(endpoint: string, payload: unknown): Prom
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * POST para el panel: la respuesta se lee de verdad. Apps Script devuelve
+ * `{ ok: true, id }` o `{ ok: false, error: "token" | ... }` con CORS, así que
+ * el mensaje que se muestra en pantalla es el que mandó la hoja.
+ */
+export async function postSheetJson(
+  endpoint: string,
+  payload: unknown,
+): Promise<SheetPostResult> {
+  if (!isValidEndpoint(endpoint)) return { ok: false, error: "url" };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify(payload),
+    });
+
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch {
+      return { ok: false, error: response.ok ? "respuesta" : `http-${response.status}` };
+    }
+
+    if (!data || typeof data !== "object") return { ok: false, error: "respuesta" };
+    const record = data as Record<string, unknown>;
+    const rawError = typeof record["error"] === "string" ? record["error"].trim() : "";
+    const error = rawError || undefined;
+
+    if (record["ok"] === true && response.ok) return { ok: true };
+    return {
+      ok: false,
+      error: error ?? (response.ok ? "respuesta" : `http-${response.status}`),
+    };
+  } catch {
+    return { ok: false, error: "red" };
   }
 }
 

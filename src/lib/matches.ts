@@ -5,16 +5,17 @@
 // localStorage para arrancar al instante y para seguir funcionando si la hoja
 // no responde.
 //
-// La lectura se hace con JSONP (un <script> con callback), no con fetch: Apps
-// Script no manda cabeceras CORS y un fetch normal no podría leer la respuesta.
-// La escritura usa el mismo POST `no-cors` que los tiempos del premio.
+// La lectura se hace con JSONP (un <script> con callback), no con fetch: así
+// funciona aunque la respuesta no traiga cabeceras CORS. La escritura del panel
+// sí usa fetch con CORS para leer la respuesta del script y mostrar su error.
 
 import {
   getDefaultFanSheetEndpoint,
   getFanSheetEndpoint,
   hasFanSheetOverride,
-  postSheetPayload,
+  postSheetJson,
   resetFanSheetOverride,
+  type SheetPostResult,
 } from "@/lib/fan-sheet";
 
 export type Match = {
@@ -36,6 +37,7 @@ export type Match = {
 };
 
 export type MatchesState = { past: Match[]; next: Match[] };
+export type MatchWriteResult = SheetPostResult;
 
 export const MATCHES_CACHE_KEY = "anxo-carro:matches-v6";
 /** Margen tras el kickoff para dar un partido por terminado si no se marcó. */
@@ -548,7 +550,29 @@ export function clearMatchesMemoryCache(): void {
 const MATCHES_TTL_MS = 5 * 60_000;
 let matchesCache: { at: number; matches: Match[] } | null = null;
 
-const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const localBase = (): Match[] => {
+  const current = matchesCache?.matches ?? readCachedMatches();
+  return current && current.length > 0 ? current : DEFAULT_MATCHES;
+};
+
+const commitLocalMatches = (matches: Match[]): void => {
+  matchesCache = { at: Date.now(), matches };
+  writeCachedMatches(matches);
+};
+
+/** Refleja al instante un guardado confirmado, aunque la relectura falle. */
+export function rememberSavedMatch(match: Match): void {
+  const current = localBase();
+  const found = current.some((item) => item.id === match.id);
+  commitLocalMatches(
+    found ? current.map((item) => (item.id === match.id ? match : item)) : [...current, match],
+  );
+}
+
+/** Refleja al instante un borrado confirmado. */
+export function forgetDeletedMatch(id: string): void {
+  commitLocalMatches(localBase().filter((item) => item.id !== id));
+}
 
 type JsonObject = Record<string, unknown>;
 
@@ -656,70 +680,33 @@ export async function loadMatchesFromSheet(force = false): Promise<Match[] | nul
   return matches;
 }
 
-const matchKey = (match: Match): string => {
-  const kickoff = Date.parse(match.kickoffAt);
-  const when = Number.isNaN(kickoff) ? match.kickoffAt : String(kickoff);
-  return [
-    match.rival,
-    when,
-    match.home ? "1" : "0",
-    match.played ? "1" : "0",
-    match.matchday ?? 0,
-    match.gf ?? "",
-    match.ga ?? "",
-    match.addedFirst ?? 0,
-    match.addedSecond ?? 0,
-  ].join("|");
-};
-
-async function confirmMatch(match: Match): Promise<boolean> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    await wait(attempt === 0 ? 700 : 1200);
-    const list = await loadMatchesFromSheet(true);
-    if (list === null) continue;
-    const found = list.find((item) => item.id === match.id);
-    if (found && matchKey(found) === matchKey(match)) return true;
-  }
-  return false;
-}
-
 /**
- * Crea o actualiza un partido. Como el POST es ciego, se comprueba releyendo
- * la hoja: si el cambio no aparece, la clave del panel es incorrecta o el
- * script desplegado es el antiguo.
+ * Crea o actualiza un partido. La respuesta del script dice si se guardó; ya
+ * no hace falta adivinarlo releyendo la hoja.
  */
-export async function saveMatch(match: Match, token: string): Promise<boolean> {
+export async function saveMatch(match: Match, token: string): Promise<MatchWriteResult> {
   const endpoint = getFanSheetEndpoint();
-  if (!endpoint || !token.trim()) return false;
+  if (!endpoint) return { ok: false, error: "url" };
+  if (!token.trim()) return { ok: false, error: "token" };
 
-  const sent = await postSheetPayload(endpoint, {
+  return postSheetJson(endpoint, {
     type: "partido",
     token: token.trim(),
     partido: match,
   });
-  if (!sent) return false;
-
-  return confirmMatch(match);
 }
 
-export async function deleteMatch(id: string, token: string): Promise<boolean> {
+export async function deleteMatch(id: string, token: string): Promise<MatchWriteResult> {
   const endpoint = getFanSheetEndpoint();
-  if (!endpoint || !token.trim() || !id) return false;
+  if (!endpoint) return { ok: false, error: "url" };
+  if (!token.trim()) return { ok: false, error: "token" };
+  if (!id) return { ok: false, error: "id" };
 
-  const sent = await postSheetPayload(endpoint, {
+  return postSheetJson(endpoint, {
     type: "partido-borrar",
     token: token.trim(),
     id,
   });
-  if (!sent) return false;
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    await wait(attempt === 0 ? 700 : 1200);
-    const list = await loadMatchesFromSheet(true);
-    if (list === null) continue;
-    if (!list.some((item) => item.id === id)) return true;
-  }
-  return false;
 }
 
 export function newMatchId(): string {
