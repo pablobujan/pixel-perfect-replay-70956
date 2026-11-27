@@ -10,6 +10,7 @@ import {
   effectiveDisconnectionSeconds,
   disconnectionSeconds,
   isHalfTime,
+  isScreenOffAwayGap,
   matchElapsedSeconds,
   matchProgressPct,
   matchTiming,
@@ -169,6 +170,27 @@ describe("match clock", () => {
     expect(
       restoreAwayRanges([{ start: at(1200), end: null }], at(1210), awayOpts({ leftPage: true })),
     ).toEqual([]);
+  });
+
+  it("descarta el hueco aunque la página tardara 15 s en congelarse al apagar", () => {
+    expect(
+      restoreAwayRanges(
+        [{ start: at(1200), end: null }],
+        at(3600),
+        awayOpts({ aliveMs: 14_000, aliveThresholdMs: 30_000 }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("reconoce el apagado de pantalla sin pagehide y con latido corto", () => {
+    const opts = { leftPage: false, aliveMs: 14_000, aliveThresholdMs: 30_000 };
+
+    expect(isScreenOffAwayGap(opts)).toBe(true);
+    expect(isScreenOffAwayGap({ ...opts, aliveMs: 0 })).toBe(true);
+    // Salir de la web manda aunque la pantalla se apague después.
+    expect(isScreenOffAwayGap({ ...opts, leftPage: true })).toBe(false);
+    // Si la página siguió viva, era otra app/web: sí es ausencia.
+    expect(isScreenOffAwayGap({ ...opts, aliveMs: 30_000 })).toBe(false);
   });
 });
 

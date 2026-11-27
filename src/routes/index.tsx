@@ -10,6 +10,7 @@ import {
   awayProgressRanges,
   effectiveDisconnectionSeconds,
   isHalfTime,
+  isScreenOffAwayGap,
   matchElapsedSeconds,
   matchProgressPct,
   matchTiming,
@@ -256,10 +257,12 @@ const AWAY_TITLE = "¡Vuelve al Modo Anxo Carro!";
 // perdonan, para que encender y apagar la pantalla un instante no reste nada.
 const SHORT_AWAY_MS = 20_000;
 // Mientras está "fuera", la página late cada 2 s y guarda cuánto aguantó viva.
-// Es lo que distingue apagar la pantalla desde la app (la pestaña se congela al
-// instante y sigue contando) de salir de la web y luego apagar (la página vivió
-// al menos un latido y ese hueco sí es ausencia).
-const AWAY_ALIVE_THRESHOLD_MS = 2_000;
+// Es lo que distingue apagar la pantalla desde la app (la pestaña se congela en
+// seguida y sigue contando) de salir de la web y luego apagar (la página sigue
+// viva bastante rato y ese hueco sí es ausencia). Chromium consulta el bloqueo
+// de pantalla en sondeos de ~15 s, así que el margen tiene que ser mayor: con
+// 2 s el aviso llegaba tarde y se restaban minutos de un simple apagado.
+const AWAY_ALIVE_THRESHOLD_MS = 30_000;
 const AWAY_HEARTBEAT_MS = 2_000;
 const AWAY_HEARTBEAT_PERSIST_MS = 5_000;
 // Margen para cancelar la ausencia recién cerrada cuando la prueba de bloqueo
@@ -439,8 +442,8 @@ export default function Index() {
   const idleDetectorStartingRef = useRef(false);
   const [notificationState, setNotificationState] = useState<NotificationState>("unknown");
   // "on" = el móvil puede detectar la pantalla bloqueada con Idle Detection;
-  // "off" = sin permiso o sin soporte. En ambos casos apagar la pantalla cuenta
-  // como ausencia; el detector solo ayuda a enterarse antes.
+  // "off" = sin permiso o sin soporte. En ambos casos apagar la pantalla sigue
+  // sumando minutos; el detector solo permite cancelar la ausencia antes.
   const [lockGuard, setLockGuard] = useState<"unknown" | "on" | "off">("unknown");
   const lockGuardSupported = useRef(false);
   const [debugVisible, setDebugVisible] = useState(false);
@@ -747,43 +750,6 @@ export default function Index() {
     if (typeof document !== "undefined") document.title = AWAY_TITLE;
   }, [applyAwayRanges, startAwayHeartbeat]);
 
-  const markBack = useCallback(() => {
-    // Defensivo: aunque `awayRef` se hubiera quedado desincronizado, si hay un
-    // tramo abierto lo cerramos para que el cronómetro no se quede congelado.
-    const hasOpenRange =
-      awayRef.current || awayRangesRef.current.some((r) => r.end === null);
-    if (!hasOpenRange) {
-      stopAwayHeartbeat();
-      return;
-    }
-    stopAwayHeartbeat();
-    const aliveBeforeClose = awayAliveMsRef.current;
-    lastAwayAliveMsRef.current = aliveBeforeClose;
-    awayAliveMsRef.current = 0;
-    persistSessionMeta({ awayAliveMs: 0 });
-    // Cerramos cualquier aviso que quedara de una versión anterior.
-    void clearAwayNotification();
-    awayRef.current = false;
-    const startedAt = awayStartedAtRef.current;
-    awayStartedAtRef.current = 0;
-    setIsAway(false);
-    const end = Date.now();
-    // Ausencias muy cortas: Chrome puede no llegar a ver el bloqueo (consulta
-    // el estado cada ~15 s). No penalizamos esos segundos.
-    const tooShort = startedAt > 0 && end - startedAt < SHORT_AWAY_MS;
-    lastClosedAwayRef.current = tooShort ? null : { end, aliveMs: aliveBeforeClose };
-    applyAwayRanges((prev) => {
-      if (tooShort) {
-        const next = prev.filter((r) => r.end !== null);
-        return next.length === prev.length ? prev : next;
-      }
-      if (!prev.some((r) => r.end === null)) return prev;
-      return prev.map((r) => (r.end === null ? { ...r, end } : r));
-    });
-    if (typeof document !== "undefined") document.title = APP_TITLE;
-    setResumeNotice(!tooShort);
-  }, [applyAwayRanges, stopAwayHeartbeat]);
-
   // La pantalla se apagó desde la app: la ausencia que se acaba de abrir o
   // cerrar era falsa, así que la deshacemos (sin hueco gris y sin aviso). Solo
   // se toca el último tramo: un gris legítimo anterior no se borra.
@@ -820,6 +786,60 @@ export default function Index() {
     },
     [applyAwayRanges, stopAwayHeartbeat],
   );
+
+  const markBack = useCallback(() => {
+    // Defensivo: aunque `awayRef` se hubiera quedado desincronizado, si hay un
+    // tramo abierto lo cerramos para que el cronómetro no se quede congelado.
+    const hasOpenRange =
+      awayRef.current || awayRangesRef.current.some((r) => r.end === null);
+    if (!hasOpenRange) {
+      stopAwayHeartbeat();
+      return;
+    }
+    stopAwayHeartbeat();
+    const aliveBeforeClose = awayAliveMsRef.current;
+    lastAwayAliveMsRef.current = aliveBeforeClose;
+    awayAliveMsRef.current = 0;
+    persistSessionMeta({ awayAliveMs: 0 });
+    // Cerramos cualquier aviso que quedara de una versión anterior.
+    void clearAwayNotification();
+    awayRef.current = false;
+    const startedAt = awayStartedAtRef.current;
+    awayStartedAtRef.current = 0;
+    setIsAway(false);
+    const end = Date.now();
+    // Ausencias muy cortas: Chrome puede no llegar a ver el bloqueo (consulta
+    // el estado cada ~15 s). No penalizamos esos segundos.
+    const tooShort = startedAt > 0 && end - startedAt < SHORT_AWAY_MS;
+    lastClosedAwayRef.current = tooShort ? null : { end, aliveMs: aliveBeforeClose };
+    applyAwayRanges((prev) => {
+      if (tooShort) {
+        const next = prev.filter((r) => r.end !== null);
+        return next.length === prev.length ? prev : next;
+      }
+      if (!prev.some((r) => r.end === null)) return prev;
+      return prev.map((r) => (r.end === null ? { ...r, end } : r));
+    });
+    if (typeof document !== "undefined") document.title = APP_TITLE;
+    setResumeNotice(!tooShort);
+
+    // Apagar la pantalla con la web delante no es salir de la web. Si no hubo
+    // `pagehide` y la página se congeló enseguida, borramos el tramo aunque el
+    // navegador no tenga Idle Detection (Safari, Firefox...). Antes solo lo
+    // hacía el detector de Chrome, así que en esos móviles se restaban minutos.
+    const leftPage =
+      leftPageAtRef.current !== null || Date.now() < leftPageRecentUntilRef.current;
+    if (
+      lastClosedAwayRef.current &&
+      isScreenOffAwayGap({
+        leftPage,
+        aliveMs: aliveBeforeClose,
+        aliveThresholdMs: AWAY_ALIVE_THRESHOLD_MS,
+      })
+    ) {
+      cancelAway();
+    }
+  }, [applyAwayRanges, cancelAway, stopAwayHeartbeat]);
 
   const handleScreenStateChange = useCallback(() => {
     const detector = idleDetectorRef.current;

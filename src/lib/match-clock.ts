@@ -168,6 +168,23 @@ export function effectiveDisconnectionSeconds(
 }
 
 /**
+ * Un hueco en el que la página desapareció sin `pagehide` y el latido se cortó
+ * enseguida es un apagado de pantalla con la app delante, no una salida de la
+ * web. En ese caso el modo fan debe seguir sumando minutos.
+ *
+ * `pagehide` manda: si el socio salió de verdad, el hueco cuenta aunque la
+ * pantalla se apague después. El latido distingue los dos casos en navegadores
+ * sin Idle Detection (Safari, Firefox...).
+ */
+export function isScreenOffAwayGap(opts: {
+  leftPage: boolean;
+  aliveMs: number;
+  aliveThresholdMs: number;
+}): boolean {
+  return !opts.leftPage && opts.aliveMs < opts.aliveThresholdMs;
+}
+
+/**
  * Reconstruye los tramos de ausencia guardados al recargar/abrir la app.
  *
  * Un tramo abierto significa que la pestaña murió (o se congeló) estando
@@ -197,8 +214,7 @@ export function restoreAwayRanges(
 
   const start = Math.min(...open.map((r) => r.start));
   if (now - start < opts.shortAwayMs) return closed;
-  const definiteExit = opts.leftPage || opts.aliveMs >= opts.aliveThresholdMs;
-  if (!definiteExit) return closed;
+  if (isScreenOffAwayGap(opts)) return closed;
   return [...closed, { start, end: now }];
 }
 
